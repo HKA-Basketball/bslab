@@ -141,17 +141,39 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
 
     if ( strcmp( path, "/" ) == 0 )
     {
+        LOG("path is rootdirectory \'/\'");
         statbuf->st_mode = S_IFDIR | 0755;
         statbuf->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
     }
-    else if ( strcmp( path, "/file54" ) == 0 || ( strcmp( path, "/file349" ) == 0 ) )
+    else if ( strlen(path) > 0 )
     {
-        statbuf->st_mode = S_IFREG | 0644;
-        statbuf->st_nlink = 1;
-        statbuf->st_size = 1024;
-    }
-    else
+        LOG("path-length > 0");
+        for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
+        {
+            if (myFsEmpty[i]){
+                continue;
+            }
+            MyFsFileInfo info = myFsFiles[i];
+            if (strcmp(path, info.cPath) == 0)
+            {
+                statbuf->st_mode = info.mode;
+                statbuf->st_nlink = 1;
+                statbuf->st_size = info.size;
+                LOG("filled statbuf with data");
+                return 0;
+            }
+        }
+        LOG("havent found file in myFsFiles-array");
+
         ret= -ENOENT;
+        /*statbuf->st_mode = S_IFREG | 0644;
+        statbuf->st_nlink = 1;
+        statbuf->st_size = 1024;*/
+    }
+    else {
+        LOG("path-length <= 0");
+        ret= -ENOENT;
+    }
 
     RETURN(ret);
 }
@@ -227,7 +249,22 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
 
     LOGF( "--> Trying to read %s, %lu, %lu\n", path, (unsigned long) offset, size );
 
+    int index = iIsPathValid(path, fileInfo->fh);
+    if (index < 0)
+        return index;
 
+    MyFsFileInfo& info = myFsFiles[index];
+
+    if (info.size < size + offset)
+        return -EINVAL;
+
+    void* out = memcpy( buf, info.data + offset, size );
+    if (out == nullptr)
+        return -EAGAIN;
+
+    return size;
+
+    /*
     char file54Text[] = "Hello World From File54!\n";
     char file349Text[] = "Hello World From File349!\n";
     char *selectedText = NULL;
@@ -246,6 +283,7 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
     memcpy( buf, selectedText + offset, size );
 
     RETURN((int) (strlen( selectedText ) - offset));
+     */
 }
 
 /// @brief Write to a file.
@@ -403,6 +441,33 @@ void MyInMemoryFS::fuseDestroy() {
 }
 
 // TODO: [PART 1] You may add your own additional methods here!
+
+int MyInMemoryFS::iIsPathValid(const char *path, uint64_t fh)
+{
+    if (fh < 0 && fh > NUM_DIR_ENTRIES)
+        return -1;
+
+    if (strcmp(path, myFsFiles[fh].cPath) == 0)
+    {
+        return fh;
+    }
+
+    return -1;
+}
+
+int MyInMemoryFS::iFindEmptySpot()
+{
+    for (int i = 0; i < NUM_DIR_ENTRIES; i++)
+    {
+        if (myFsEmpty[i])
+        {
+            return i;
+        }
+    }
+
+    return -ENOSPC;
+}
+
 
 // DO NOT EDIT ANYTHING BELOW THIS LINE!!!
 
