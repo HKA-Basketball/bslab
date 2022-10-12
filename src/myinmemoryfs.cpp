@@ -32,6 +32,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <dirent.h>
 
 #include "macros.h"
 #include "myfs.h"
@@ -226,6 +227,7 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
 
     LOGF( "--> Trying to read %s, %lu, %lu\n", path, (unsigned long) offset, size );
 
+
     char file54Text[] = "Hello World From File54!\n";
     char file349Text[] = "Hello World From File349!\n";
     char *selectedText = NULL;
@@ -339,8 +341,22 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
 
     if ( strcmp( path, "/" ) == 0 ) // If the user is trying to show the files/directories of the root directory show the following
     {
+        DIR *dp;
+        struct dirent *de;
+        dp = opendir(path);
+
+        if (dp == NULL)
+            return -ENOENT;
+
+        while((de = readdir(dp)) != NULL)
+        {
+            if (filler(buf, de->d_name, NULL, 0))
+                continue;
+        }
+        /*
         filler( buf, "file54", NULL, 0 );
         filler( buf, "file349", NULL, 0 );
+         */
     }
 
     RETURN(0);
@@ -365,6 +381,12 @@ void* MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
         LOG("Using in-memory mode");
 
         // TODO: [PART 1] Implement your initialization methods here
+
+        iCounterFiles = iCounterOpen = 0;
+        memset(&myFsFiles, 0, sizeof(myFsFiles));
+        memset(&myFsEmpty, 1, sizeof(myFsEmpty));
+        memset(&myFsOpenFiles, 0, sizeof(myFsOpenFiles));
+
     }
 
     RETURN(0);
