@@ -357,6 +357,7 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
     memcpy( buf, selectedText + offset, size );
 
     RETURN((int) (strlen( selectedText ) - offset));
+     */
 }
 
 /// @brief Write to a file.
