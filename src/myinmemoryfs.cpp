@@ -69,6 +69,38 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
+    if (iCounterFiles >= NUM_DIR_ENTRIES)
+        return -ENOSPC;
+
+    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
+    {
+        MyFsFileInfo info = myFsFiles[i];
+        if (strcmp(path, info.cPath) == 0)
+        {
+            return -EEXIST;
+        }
+    }
+
+    int index = iFindEmptySpot();
+
+    if (index < 0)
+        return index;
+
+    MyFsFileInfo& file = myFsFiles[index];
+
+    if (strlen(path)-1 > NAME_LENGTH)
+        return -EINVAL;
+
+    strcpy(file.cName, (path+1));
+    file.cPath = path;
+    file.size = 0;
+    file.data = nullptr;
+    file.atime.tv_sec = file.ctime.tv_sec = file.mtime.tv_sec = time(NULL);
+    file.gid = getgid();
+    file.uid = getuid();
+    file.mode = mode;
+
+    iCounterFiles++;
 
     RETURN(0);
 }
@@ -83,6 +115,25 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
+    int index = -1;
+    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
+    {
+        MyFsFileInfo info = myFsFiles[i];
+        if (strcmp(path, info.cPath) == 0)
+        {
+            index = i;
+        }
+    }
+    if (index < 0)
+        return -ENOENT;
+
+    memset(&myFsFiles[index], 0, sizeof(MyFsFileInfo));
+
+    myFsOpenFiles[index] = false;
+    myFsEmpty[index] = true;
+
+    iCounterOpen--;
+    iCounterFiles--;
 
     RETURN(0);
 }
@@ -222,6 +273,29 @@ int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
 
     // TODO: [PART 1] Implement this!
 
+    if (iCounterOpen >= NUM_OPEN_FILES)
+        return -EMFILE;
+
+    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
+    {
+        MyFsFileInfo& info = myFsFiles[i];
+        if (strcmp(path, info.cPath) == 0)
+        {
+            if (myFsOpenFiles[i])
+            {
+                return -EPERM; // Already Open
+            }
+            else
+            {
+                // TODO: Add struct info?
+
+                myFsOpenFiles[i] = true;
+                fileInfo->fh = i; // can be used in fuseRead and fuseRelease
+                iCounterOpen++;
+            }
+        }
+    }
+
     RETURN(0);
 }
 
@@ -283,7 +357,6 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
     memcpy( buf, selectedText + offset, size );
 
     RETURN((int) (strlen( selectedText ) - offset));
-     */
 }
 
 /// @brief Write to a file.

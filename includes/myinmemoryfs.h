@@ -17,6 +17,7 @@
 class MyInMemoryFS : public MyFS {
 protected:
     // BlockDevice blockDevice;
+
 public:
     static MyInMemoryFS *Instance();
 
