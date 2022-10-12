@@ -198,7 +198,13 @@ int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
+    // TODO: get the file struct with all the data by the Path
 
+
+    // can be used in fuseRead and fuseRelease
+    //fileInfo->fh = ; // Handle, maybe an Pointer to the file struct??? I guess
+    
+    
     RETURN(0);
 }
 
