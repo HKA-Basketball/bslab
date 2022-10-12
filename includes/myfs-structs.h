@@ -27,7 +27,7 @@ struct MyFsFileInfo
     struct timespec mtime;	    // Time of last modification.
     struct timespec ctime;	    // Time of last status change.
 
-    char* cPath;                // Path to the file
+    const char* cPath;                // Path to the file
 };
 
 #endif /* myfs_structs_h */

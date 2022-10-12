@@ -18,6 +18,13 @@ class MyInMemoryFS : public MyFS {
 protected:
     // BlockDevice blockDevice;
 
+private:
+    MyFsFileInfo myFsFiles[NUM_DIR_ENTRIES];
+    bool myFsOpenFiles[NUM_DIR_ENTRIES];
+    bool myFsEmpty[NUM_DIR_ENTRIES];
+    unsigned int iCounterFiles;
+    unsigned int iCounterOpen;
+
 public:
     static MyInMemoryFS *Instance();
 
@@ -47,7 +54,8 @@ public:
     virtual void fuseDestroy();
 
     // TODO: Add methods of your file system here
-
+    int iIsPathValid(const char *path, uint64_t fh);
+    int iFindEmptySpot();
 };
 
 #endif //MYFS_MYINMEMORYFS_H

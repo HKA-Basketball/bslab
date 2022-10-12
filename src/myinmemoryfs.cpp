@@ -32,6 +32,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <dirent.h>
 
 #include "macros.h"
 #include "myfs.h"
@@ -68,6 +69,38 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
+    if (iCounterFiles >= NUM_DIR_ENTRIES)
+        return -ENOSPC;
+
+    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
+    {
+        MyFsFileInfo info = myFsFiles[i];
+        if (strcmp(path, info.cPath) == 0)
+        {
+            return -EEXIST;
+        }
+    }
+
+    int index = iFindEmptySpot();
+
+    if (index < 0)
+        return index;
+
+    MyFsFileInfo& file = myFsFiles[index];
+
+    if (strlen(path)-1 > NAME_LENGTH)
+        return -EINVAL;
+
+    strcpy(file.cName, (path+1));
+    file.cPath = path;
+    file.size = 0;
+    file.data = nullptr;
+    file.atime.tv_sec = file.ctime.tv_sec = file.mtime.tv_sec = time(NULL);
+    file.gid = getgid();
+    file.uid = getuid();
+    file.mode = mode;
+
+    iCounterFiles++;
 
     RETURN(0);
 }
@@ -82,6 +115,25 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
+    int index = -1;
+    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
+    {
+        MyFsFileInfo info = myFsFiles[i];
+        if (strcmp(path, info.cPath) == 0)
+        {
+            index = i;
+        }
+    }
+    if (index < 0)
+        return -ENOENT;
+
+    memset(&myFsFiles[index], 0, sizeof(MyFsFileInfo));
+
+    myFsOpenFiles[index] = false;
+    myFsEmpty[index] = true;
+    
+    iCounterOpen--;
+    iCounterFiles--;
 
     RETURN(0);
 }
@@ -143,11 +195,24 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
         statbuf->st_mode = S_IFDIR | 0755;
         statbuf->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
     }
-    else if ( strcmp( path, "/file54" ) == 0 || ( strcmp( path, "/file349" ) == 0 ) )
+    else if ( strlen(path) > 0 )
     {
-        statbuf->st_mode = S_IFREG | 0644;
+        for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
+        {
+            MyFsFileInfo info = myFsFiles[i];
+            if (strcmp(path, info.cPath) == 0)
+            {
+                statbuf->st_mode = info.mode;
+                statbuf->st_nlink = 1;
+                statbuf->st_size =info.size;
+                return 0;
+            }
+        }
+
+        ret= -ENOENT;
+        /*statbuf->st_mode = S_IFREG | 0644;
         statbuf->st_nlink = 1;
-        statbuf->st_size = 1024;
+        statbuf->st_size = 1024;*/
     }
     else
         ret= -ENOENT;
@@ -198,12 +263,29 @@ int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
-    // TODO: get the file struct with all the data by the Path
 
-
-    // can be used in fuseRead and fuseRelease
-    //fileInfo->fh = ; // Handle, maybe an Pointer to the file struct??? I guess
+    if (iCounterOpen >= NUM_OPEN_FILES)
+        return -EMFILE;
     
+    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
+    {
+        MyFsFileInfo& info = myFsFiles[i];
+        if (strcmp(path, info.cPath) == 0)
+        {
+            if (myFsOpenFiles[i])
+            {
+                return -EPERM; // Already Open
+            }
+            else
+            {
+                // TODO: Add struct info?
+                
+                myFsOpenFiles[i] = true;
+                fileInfo->fh = i; // can be used in fuseRead and fuseRelease
+                iCounterOpen++;
+            }
+        }
+    }    
     
     RETURN(0);
 }
@@ -232,7 +314,22 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
 
     LOGF( "--> Trying to read %s, %lu, %lu\n", path, (unsigned long) offset, size );
 
-    char file54Text[] = "Hello World From File54!\n";
+    int index = iIsPathValid(path, fileInfo->fh);
+    if (index < 0)
+        return index;
+
+    MyFsFileInfo& info = myFsFiles[index];
+
+    if (info.size < size + offset)
+        return -EINVAL;
+    
+    void* out = memcpy( buf, info.data + offset, size );
+    if (out == nullptr)
+        return -EAGAIN;
+
+    return size;
+
+    /*char file54Text[] = "Hello World From File54!\n";
     char file349Text[] = "Hello World From File349!\n";
     char *selectedText = NULL;
 
@@ -243,13 +340,13 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
     else if ( strcmp( path, "/file349" ) == 0 )
         selectedText = file349Text;
     else
-        return -ENOENT;
+        return -ENOENT;*/
 
     // ... //
 
-    memcpy( buf, selectedText + offset, size );
+    //memcpy( buf, selectedText + offset, size );
 
-    RETURN((int) (strlen( selectedText ) - offset));
+    //RETURN((int) (strlen( selectedText ) - offset));
 }
 
 /// @brief Write to a file.
@@ -345,8 +442,21 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
 
     if ( strcmp( path, "/" ) == 0 ) // If the user is trying to show the files/directories of the root directory show the following
     {
-        filler( buf, "file54", NULL, 0 );
-        filler( buf, "file349", NULL, 0 );
+        DIR *dp;
+	    struct dirent *de;
+        dp = opendir(path);
+
+        if (dp == NULL)
+            return -ENOENT;
+
+        while((de = readdir(dp)) != NULL)
+        {
+            if (filler(buf, de->d_name, NULL, 0))
+                continue;
+        }
+
+        //filler( buf, "file54", NULL, 0 );
+        //filler( buf, "file349", NULL, 0 );
     }
 
     RETURN(0);
@@ -371,6 +481,11 @@ void* MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
         LOG("Using in-memory mode");
 
         // TODO: [PART 1] Implement your initialization methods here
+        this->iCounterOpen = 0;
+        this->iCounterFiles = 0;
+        memset(&myFsFiles[0], 0, sizeof(myFsFiles));
+        memset(&myFsOpenFiles[0], 0, sizeof(myFsOpenFiles));
+        memset(&myFsEmpty[0], 1, sizeof(myFsEmpty));
     }
 
     RETURN(0);
@@ -387,6 +502,32 @@ void MyInMemoryFS::fuseDestroy() {
 }
 
 // TODO: [PART 1] You may add your own additional methods here!
+
+int MyInMemoryFS::iIsPathValid(const char *path, uint64_t fh)
+{
+    if (fh < 0 && fh > NUM_DIR_ENTRIES)
+        return -1;
+
+    if (strcmp(path, myFsFiles[fh].cPath) == 0)
+    {
+        return fh;
+    }
+
+    return -1;
+}
+
+int MyInMemoryFS::iFindEmptySpot()
+{
+    for (int i = 0; i < NUM_DIR_ENTRIES; i++)
+    {
+        if (myFsEmpty[i])
+        {
+            return i;
+        }
+    }
+
+    return -ENOSPC;
+}
 
 // DO NOT EDIT ANYTHING BELOW THIS LINE!!!
 
