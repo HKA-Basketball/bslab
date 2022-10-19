@@ -140,7 +140,7 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     if (index < 0)
         return -ENOENT;
 
-    // free file.data, free memory
+    // TODO: free file.data, free memory
 
     memset(&myFsFiles[index], 0, sizeof(MyFsFileInfo));
 
