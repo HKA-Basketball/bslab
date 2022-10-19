@@ -74,6 +74,9 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
 
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
     {
+        if (myFsEmpty[i]) {
+            continue;
+        }
         MyFsFileInfo info = myFsFiles[i];
         if (strcmp(path, info.cPath) == 0)
         {
@@ -99,8 +102,11 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     file.gid = getgid();
     file.uid = getuid();
     file.mode = mode;
+    myFsEmpty[index] = false;
 
     iCounterFiles++;
+
+    LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myFsFiles[index].cPath, myFsFiles[index].size, myFsFiles[index].atime.tv_sec);
 
     RETURN(0);
 }
@@ -118,6 +124,9 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     int index = -1;
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
     {
+        if (myFsEmpty[i]) {
+            continue;
+        }
         MyFsFileInfo info = myFsFiles[i];
         if (strcmp(path, info.cPath) == 0)
         {
@@ -134,6 +143,7 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
 
     iCounterOpen--;
     iCounterFiles--;
+    LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myFsFiles[index].cPath, myFsFiles[index].size, myFsFiles[index].atime.tv_sec);
 
     RETURN(0);
 }
@@ -210,7 +220,9 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
                 statbuf->st_mode = info.mode;
                 statbuf->st_nlink = 1;
                 statbuf->st_size = info.size;
+                LOG("fuseGetAttr()");
                 LOG("filled statbuf with data");
+                LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", i, myFsFiles[i].cPath, myFsFiles[i].size, myFsFiles[i].atime.tv_sec);
                 return 0;
             }
         }
@@ -227,6 +239,7 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
     }
 
     RETURN(ret);
+    return ret;
 }
 
 /// @brief Change file permissions.
@@ -278,6 +291,9 @@ int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
 
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
     {
+        if (myFsEmpty[i]) {
+            continue;
+        }
         MyFsFileInfo& info = myFsFiles[i];
         if (strcmp(path, info.cPath) == 0)
         {
@@ -292,6 +308,8 @@ int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
                 myFsOpenFiles[i] = true;
                 fileInfo->fh = i; // can be used in fuseRead and fuseRelease
                 iCounterOpen++;
+                myFsFiles[i].atime.tv_sec = time( NULL );
+                LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", i, myFsFiles[i].cPath, myFsFiles[i].size, myFsFiles[i].atime.tv_sec);
             }
         }
     }
@@ -328,6 +346,7 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
         return index;
 
     MyFsFileInfo& info = myFsFiles[index];
+    LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myFsFiles[index].cPath, myFsFiles[index].size, myFsFiles[index].atime.tv_sec);
 
     if (info.size < size + offset)
         return -EINVAL;
@@ -394,6 +413,19 @@ int MyInMemoryFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo)
 
     // TODO: [PART 1] Implement this!
 
+    int valid = iIsPathValid(path, fileInfo->fh);
+    if (valid < 0) {
+        RETURN(valid);
+    }
+
+    if (!myFsOpenFiles[valid]) {
+        RETURN(-EBADF);
+    }
+
+    myFsOpenFiles[valid] = false;
+    iCounterOpen--;
+    fileInfo->fh = -EBADF;
+
     RETURN(0);
 }
 
@@ -455,20 +487,22 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
     {
         DIR *dp;
         struct dirent *de;
-        dp = opendir(path);
+        dp = opendir("~/home/user/CLionProjects/bslab/build/mount");
 
         if (dp == NULL)
             return -ENOENT;
 
         while((de = readdir(dp)) != NULL)
         {
-            if (filler(buf, de->d_name, NULL, 0))
-                continue;
+            // if (filler(buf, de->d_name, NULL, 0))
+            //     continue;
+            LOGF("Added file to filler, name: %s", de->d_name);
+            filler(buf, de->d_name, NULL, 0);
         }
         /*
         filler( buf, "file54", NULL, 0 );
         filler( buf, "file349", NULL, 0 );
-         */
+        */
     }
 
     RETURN(0);
@@ -518,14 +552,16 @@ void MyInMemoryFS::fuseDestroy() {
 
 int MyInMemoryFS::iIsPathValid(const char *path, uint64_t fh)
 {
-    if (fh < 0 && fh > NUM_DIR_ENTRIES)
+    if (fh < 0 || fh >= NUM_DIR_ENTRIES) {
         return -1;
-
+    }
+    if (myFsEmpty[fh]) {
+        return -1;
+    }
     if (strcmp(path, myFsFiles[fh].cPath) == 0)
     {
         return fh;
     }
-
     return -1;
 }
 
