@@ -69,9 +69,12 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
+
+    //filesystem full?
     if (iCounterFiles >= NUM_DIR_ENTRIES)
         return -ENOSPC;
 
+    //file with same name exists?
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
     {
         if (myFsEmpty[i]) {
@@ -84,26 +87,27 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
         }
     }
 
+    //find index to put fileinfo in
     int index = iFindEmptySpot();
-
     if (index < 0)
         return index;
 
-    MyFsFileInfo& file = myFsFiles[index];
-
+    //check length of given filename
     if (strlen(path)-1 > NAME_LENGTH)
         return -EINVAL;
 
-    strcpy(file.cName, (path+1));
-    file.cPath = path;
-    file.size = 0;
-    file.data = nullptr;
-    file.atime.tv_sec = file.ctime.tv_sec = file.mtime.tv_sec = time(NULL);
-    file.gid = getgid();
-    file.uid = getuid();
-    file.mode = mode;
+    //overwrite all fileinfo values
+    strcpy(myFsFiles[index].cName, (path+1));
+    strcpy(myFsFiles[index].cPath, path);
+    myFsFiles[index].size = 0;
+    myFsFiles[index].data = nullptr;
+    myFsFiles[index].atime.tv_sec = myFsFiles[index].ctime.tv_sec = myFsFiles[index].mtime.tv_sec = time(NULL);
+    myFsFiles[index].gid = getgid();
+    myFsFiles[index].uid = getuid();
+    myFsFiles[index].mode = mode;
     myFsEmpty[index] = false;
 
+    //increment file counter
     iCounterFiles++;
 
     LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myFsFiles[index].cPath, myFsFiles[index].size, myFsFiles[index].atime.tv_sec);
@@ -135,6 +139,8 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     }
     if (index < 0)
         return -ENOENT;
+
+    // free file.data, free memory
 
     memset(&myFsFiles[index], 0, sizeof(MyFsFileInfo));
 
@@ -215,6 +221,7 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
                 continue;
             }
             MyFsFileInfo info = myFsFiles[i];
+            LOGF("Comparing string1: %s, and string2: %s", path, info.cPath);
             if (strcmp(path, info.cPath) == 0)
             {
                 statbuf->st_mode = info.mode;
@@ -398,6 +405,33 @@ int MyInMemoryFS::fuseWrite(const char *path, const char *buf, size_t size, off_
     LOGM();
 
     // TODO: [PART 1] Implement this!
+    if (0 > iIsPathValid(path, fileInfo->fh)){
+        RETURN(iIsPathValid(path, fileInfo->fh));
+    }
+
+    MyFsFileInfo& info = myFsFiles[fileInfo->fh];
+
+    LOGF("Trying to write to path: %s, %ld bytes, starting with offset: %ld", path, size, offset);
+
+    // need more space??
+    if (info.size < size + offset) {
+        LOGF("Need more space. Reallocating %ld bytes", size+offset);
+        void* tmpdata = realloc(info.data, size + offset);
+        if (tmpdata != nullptr) {
+            info.data = (unsigned char*) tmpdata;
+            info.size = size + offset;
+        }
+        LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", fileInfo->fh, myFsFiles[fileInfo->fh].cPath, myFsFiles[fileInfo->fh].size, myFsFiles[fileInfo->fh].atime.tv_sec);
+    }
+
+    // memcpy buf onto file.data + offset
+    void* tmpdata = memcpy(info.data + offset, buf, size);
+    if (tmpdata == nullptr) {
+        LOG("memcpy failed");
+        RETURN(-1);
+    }
+
+    info.atime.tv_sec = info.mtime.tv_sec = time(NULL);
 
     RETURN(0);
 }
@@ -485,19 +519,11 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
 
     if ( strcmp( path, "/" ) == 0 ) // If the user is trying to show the files/directories of the root directory show the following
     {
-        DIR *dp;
-        struct dirent *de;
-        dp = opendir("~/home/user/CLionProjects/bslab/build/mount");
-
-        if (dp == NULL)
-            return -ENOENT;
-
-        while((de = readdir(dp)) != NULL)
-        {
-            // if (filler(buf, de->d_name, NULL, 0))
-            //     continue;
-            LOGF("Added file to filler, name: %s", de->d_name);
-            filler(buf, de->d_name, NULL, 0);
+        for (size_t i = 0; i < NUM_DIR_ENTRIES; i++){
+            if (!myFsEmpty[i]) {
+                LOGF("adding to filler: %s", myFsFiles[i].cName);
+                filler( buf, myFsFiles[i].cName, NULL, 0);
+            }
         }
         /*
         filler( buf, "file54", NULL, 0 );
@@ -550,32 +576,32 @@ void MyInMemoryFS::fuseDestroy() {
 
 // TODO: [PART 1] You may add your own additional methods here!
 
-int MyInMemoryFS::iIsPathValid(const char *path, uint64_t fh)
-{
+int MyInMemoryFS::iIsPathValid(const char *path, uint64_t fh) {
     if (fh < 0 || fh >= NUM_DIR_ENTRIES) {
-        return -1;
+        return (-1);
     }
     if (myFsEmpty[fh]) {
-        return -1;
+        return (-1);
     }
-    if (strcmp(path, myFsFiles[fh].cPath) == 0)
-    {
-        return fh;
+    if (strcmp(path, myFsFiles[fh].cPath) == 0) {
+        return (fh);
     }
-    return -1;
+    return (-1);
 }
 
 int MyInMemoryFS::iFindEmptySpot()
 {
+    LOGM();
     for (int i = 0; i < NUM_DIR_ENTRIES; i++)
     {
         if (myFsEmpty[i])
         {
-            return i;
+            LOGF("index %ld is free", i);
+            RETURN(i);
         }
     }
 
-    return -ENOSPC;
+    RETURN(-ENOSPC);
 }
 
 
