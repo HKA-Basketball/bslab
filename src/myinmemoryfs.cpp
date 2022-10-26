@@ -135,13 +135,15 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
         if (strcmp(path, info.cPath) == 0)
         {
             index = i;
+            break;
         }
     }
 
     if (index < 0)
         return -ENOENT;
 
-    // TODO: free file.data, free memory
+    LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myFsFiles[index].cPath, myFsFiles[index].size, myFsFiles[index].atime.tv_sec);
+
     free(myFsFiles[index].data);
     myFsFiles[index].size = 0;
 
@@ -150,9 +152,8 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     myFsOpenFiles[index] = false;
     myFsEmpty[index] = true;
 
-    iCounterOpen--;
+    //iCounterOpen--;
     iCounterFiles--;
-    LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myFsFiles[index].cPath, myFsFiles[index].size, myFsFiles[index].atime.tv_sec);
 
     RETURN(0);
 }
@@ -172,6 +173,7 @@ int MyInMemoryFS::fuseRename(const char *path, const char *newpath) {
 
     // TODO: [PART 1] Implement this!
     size_t index = -1;
+    bool bNewNameAlreadyInUse = false;
 
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
     {
@@ -183,6 +185,15 @@ int MyInMemoryFS::fuseRename(const char *path, const char *newpath) {
         {
             index = i;
         }
+        if (strcmp(path, newpath) == 0)
+        {
+            bNewNameAlreadyInUse = true;
+        }
+    }
+
+    if (bNewNameAlreadyInUse)
+    {
+        RETURN(-EEXIST);
     }
 
     // file found?
@@ -236,7 +247,7 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
     statbuf->st_uid = getuid(); // The owner of the file/directory is the user who mounted the filesystem
     statbuf->st_gid = getgid(); // The group of the file/directory is the same as the group of the user who mounted the filesystem
     statbuf->st_atime = time( NULL ); // The last "a"ccess of the file/directory is right now
-    statbuf->st_mtime = time( NULL ); // The last "m"odification of the file/directory is right now
+    //statbuf->st_mtime = time( NULL ); // The last "m"odification of the file/directory is right now
 
     int ret= 0;
 
@@ -260,6 +271,7 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
                 statbuf->st_mode = myFsFiles[i].mode;
                 statbuf->st_nlink = 1;
                 statbuf->st_size = myFsFiles[i].size;
+                statbuf->st_mtime = myFsFiles[i].mtime.tv_sec; // The last "m"odification of the file/directory is right now
                 LOG("fuseGetAttr()");
                 LOG("filled statbuf with data");
                 LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", i, myFsFiles[i].cPath, myFsFiles[i].size, myFsFiles[i].atime.tv_sec);
@@ -304,6 +316,7 @@ int MyInMemoryFS::fuseChmod(const char *path, mode_t mode) {
         if (strcmp(path, info.cPath) == 0)
         {
             index = i;
+            break;
         }
     }
 
@@ -342,6 +355,7 @@ int MyInMemoryFS::fuseChown(const char *path, uid_t uid, gid_t gid) {
         if (strcmp(path, info.cPath) == 0)
         {
             index = i;
+            break;
         }
     }
 
@@ -370,7 +384,6 @@ int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
-
     if (iCounterOpen >= NUM_OPEN_FILES)
         return -EMFILE;
 
@@ -379,8 +392,8 @@ int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
         if (myFsEmpty[i]) {
             continue;
         }
-        MyFsFileInfo& info = myFsFiles[i];
-        if (strcmp(path, info.cPath) == 0)
+
+        if (strcmp(path, myFsFiles[i].cPath) == 0)
         {
             if (myFsOpenFiles[i])
             {
@@ -395,6 +408,8 @@ int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
                 iCounterOpen++;
                 myFsFiles[i].atime.tv_sec = time( NULL );
                 LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", i, myFsFiles[i].cPath, myFsFiles[i].size, myFsFiles[i].atime.tv_sec);
+                LOGF("index: %d, iCounterOpen: %d", i, iCounterOpen);
+                break;
             }
         }
     }
@@ -435,16 +450,26 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
 
     if (myFsFiles[index].size < size + offset)
     {
-        //RETURN(-EINVAL);
+        if (myFsFiles[index].size <= offset) {
+            LOGF("Offset %ld is bigger than file size %ld", offset, myFsFiles[index].size);
+            RETURN(-EINVAL);
+        }
+        LOGF("Trying to read more bytes than file is long. Reading %ld bytes starting from offset %ld instead", myFsFiles[index].size - offset, offset);
+        void* out = memcpy(buf, myFsFiles[index].data + offset, myFsFiles[index].size - offset);
+        if (out == nullptr)
+        {
+            RETURN(-EAGAIN);
+        }
+        RETURN(myFsFiles[index].size - offset);
     }
-
-    void *out = memcpy(buf, myFsFiles[index].data + offset, size);
-    if (out == nullptr)
-    {
-        RETURN(-EAGAIN);
+    else {
+        void* out = memcpy(buf, myFsFiles[index].data + offset, size);
+        if (out == nullptr)
+        {
+            RETURN(-EAGAIN);
+        }
+        RETURN(size);
     }
-
-    RETURN(size);
 
     /*
     char file54Text[] = "Hello World From File54!\n";
@@ -491,29 +516,27 @@ int MyInMemoryFS::fuseWrite(const char *path, const char *buf, size_t size, off_
         RETURN(iIsPathValid(path, fileInfo->fh));
     }
 
-    MyFsFileInfo& info = myFsFiles[fileInfo->fh];
-
     LOGF("Trying to write to path: %s, %ld bytes, starting with offset: %ld", path, size, offset);
 
     // need more space??
-    if (info.size < size + offset) {
+    if (myFsFiles[fileInfo->fh].size < size + offset) {
         LOGF("Need more space. Reallocating %ld bytes", size+offset);
-        void* tmpdata = realloc(info.data, size + offset);
+        void* tmpdata = realloc(myFsFiles[fileInfo->fh].data, size + offset);
         if (tmpdata != nullptr) {
-            info.data = (unsigned char*) tmpdata;
-            info.size = size + offset;
+            myFsFiles[fileInfo->fh].data = (unsigned char*) tmpdata;
+            myFsFiles[fileInfo->fh].size = size + offset;
         }
         LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", fileInfo->fh, myFsFiles[fileInfo->fh].cPath, myFsFiles[fileInfo->fh].size, myFsFiles[fileInfo->fh].atime.tv_sec);
     }
 
     // memcpy buf onto file.data + offset
-    void* tmpdata = memcpy(info.data + offset, buf, size);
+    void* tmpdata = memcpy(myFsFiles[fileInfo->fh].data + offset, buf, size);
     if (tmpdata == nullptr) {
         LOG("memcpy failed");
         RETURN(-1);
     }
 
-    info.atime.tv_sec = info.mtime.tv_sec = time(NULL);
+    myFsFiles[fileInfo->fh].atime.tv_sec = myFsFiles[fileInfo->fh].mtime.tv_sec = time(NULL);
 
     RETURN(0);
 }
@@ -537,6 +560,8 @@ int MyInMemoryFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo)
     if (!myFsOpenFiles[valid]) {
         RETURN(-EBADF);
     }
+
+    LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", fileInfo->fh, myFsFiles[fileInfo->fh].cPath, myFsFiles[fileInfo->fh].size, myFsFiles[fileInfo->fh].atime.tv_sec);
 
     myFsOpenFiles[valid] = false;
     iCounterOpen--;
@@ -682,7 +707,7 @@ int MyInMemoryFS::iFindEmptySpot()
             RETURN(i);
         }
     }
-
+    LOG("NOT EMPTY BY FUNC");
     RETURN(-ENOSPC);
 }
 
