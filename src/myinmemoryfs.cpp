@@ -137,10 +137,13 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
             index = i;
         }
     }
+
     if (index < 0)
         return -ENOENT;
 
     // TODO: free file.data, free memory
+    free(myFsFiles[index].data);
+    myFsFiles[index].size = 0;
 
     memset(&myFsFiles[index], 0, sizeof(MyFsFileInfo));
 
@@ -165,10 +168,41 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
 /// \return 0 on success, -ERRNO on failure.
 int MyInMemoryFS::fuseRename(const char *path, const char *newpath) {
     LOGM();
+    LOGF("Old filepath: %s, New filepath: %s", path, newpath);
 
     // TODO: [PART 1] Implement this!
+    size_t index = -1;
 
-    return 0;
+    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
+    {
+        if (myFsEmpty[i]) {
+            continue;
+        }
+        MyFsFileInfo info = myFsFiles[i];
+        if (strcmp(path, info.cPath) == 0)
+        {
+            index = i;
+        }
+    }
+
+    // file found?
+    if (index < 0)
+        return -ENOENT;
+
+    LOGF("Index: %d", index);
+    //check length of new filename
+    if (strlen(newpath)-1 > NAME_LENGTH)
+        return -EINVAL;
+
+    //overwrite fileinfo values
+    strcpy(myFsFiles[index].cName, (newpath+1));
+    strcpy(myFsFiles[index].cPath, newpath);
+    myFsFiles[index].atime.tv_sec = myFsFiles[index].ctime.tv_sec = myFsFiles[index].mtime.tv_sec = time(NULL);
+
+
+    LOGF("Index Changed: %d", index);
+
+    RETURN(0);
 }
 
 /// @brief Get file meta data.
@@ -220,13 +254,12 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
             if (myFsEmpty[i]){
                 continue;
             }
-            MyFsFileInfo info = myFsFiles[i];
-            LOGF("Comparing string1: %s, and string2: %s", path, info.cPath);
-            if (strcmp(path, info.cPath) == 0)
+            LOGF("Comparing string1: %s, and string2: %s", path, myFsFiles[i].cPath);
+            if (strcmp(path, myFsFiles[i].cPath) == 0)
             {
-                statbuf->st_mode = info.mode;
+                statbuf->st_mode = myFsFiles[i].mode;
                 statbuf->st_nlink = 1;
-                statbuf->st_size = info.size;
+                statbuf->st_size = myFsFiles[i].size;
                 LOG("fuseGetAttr()");
                 LOG("filled statbuf with data");
                 LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", i, myFsFiles[i].cPath, myFsFiles[i].size, myFsFiles[i].atime.tv_sec);
@@ -246,7 +279,7 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
     }
 
     RETURN(ret);
-    return ret;
+    //return ret;
 }
 
 /// @brief Change file permissions.
@@ -260,6 +293,28 @@ int MyInMemoryFS::fuseChmod(const char *path, mode_t mode) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
+    size_t index = -1;
+
+    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
+    {
+        if (myFsEmpty[i]) {
+            continue;
+        }
+        MyFsFileInfo info = myFsFiles[i];
+        if (strcmp(path, info.cPath) == 0)
+        {
+            index = i;
+        }
+    }
+
+    // file found?
+    if (index < 0)
+        return -ENOENT;
+
+    //overwrite fileinfo values
+    myFsFiles[index].mode = mode;
+    myFsFiles[index].atime.tv_sec = myFsFiles[index].ctime.tv_sec = myFsFiles[index].mtime.tv_sec = time(NULL);
+
 
     RETURN(0);
 }
@@ -276,6 +331,29 @@ int MyInMemoryFS::fuseChown(const char *path, uid_t uid, gid_t gid) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
+    size_t index = -1;
+
+    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
+    {
+        if (myFsEmpty[i]) {
+            continue;
+        }
+        MyFsFileInfo info = myFsFiles[i];
+        if (strcmp(path, info.cPath) == 0)
+        {
+            index = i;
+        }
+    }
+
+    // file found?
+    if (index < 0)
+        return -ENOENT;
+
+    //overwrite fileinfo values
+    myFsFiles[index].uid = uid;
+    myFsFiles[index].gid = gid;
+    myFsFiles[index].atime.tv_sec = myFsFiles[index].ctime.tv_sec = myFsFiles[index].mtime.tv_sec = time(NULL);
+
 
     RETURN(0);
 }
@@ -346,23 +424,27 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
 
     // TODO: [PART 1] Implement this!
 
-    LOGF( "--> Trying to read %s, %lu, %lu\n", path, (unsigned long) offset, size );
+    LOGF("--> Trying to read %s, %lu, %lu\n", path, (unsigned long) offset, size);
 
     int index = iIsPathValid(path, fileInfo->fh);
     if (index < 0)
         return index;
 
-    MyFsFileInfo& info = myFsFiles[index];
-    LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myFsFiles[index].cPath, myFsFiles[index].size, myFsFiles[index].atime.tv_sec);
+    LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myFsFiles[index].cPath, myFsFiles[index].size,
+         myFsFiles[index].atime.tv_sec);
 
-    if (info.size < size + offset)
-        return -EINVAL;
+    if (myFsFiles[index].size < size + offset)
+    {
+        //RETURN(-EINVAL);
+    }
 
-    void* out = memcpy( buf, info.data + offset, size );
+    void *out = memcpy(buf, myFsFiles[index].data + offset, size);
     if (out == nullptr)
-        return -EAGAIN;
+    {
+        RETURN(-EAGAIN);
+    }
 
-    return size;
+    RETURN(size);
 
     /*
     char file54Text[] = "Hello World From File54!\n";
