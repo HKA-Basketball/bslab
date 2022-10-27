@@ -706,6 +706,11 @@ void MyInMemoryFS::fuseDestroy() {
 
     // TODO: [PART 1] Implement this!
 
+    for (MyFsFileInfo file : myFsFiles) {
+        LOGF("Freeing memory. filename: %s", file.cName);
+        free(file.data);
+    }
+
 }
 
 // TODO: [PART 1] You may add your own additional methods here!
