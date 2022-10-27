@@ -539,7 +539,7 @@ int MyInMemoryFS::fuseWrite(const char *path, const char *buf, size_t size, off_
 
     myFsFiles[fileInfo->fh].atime.tv_sec = myFsFiles[fileInfo->fh].mtime.tv_sec = time(NULL);
 
-    RETURN(0);
+    RETURN(size);
 }
 
 /// @brief Close a file.
