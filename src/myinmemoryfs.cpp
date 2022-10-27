@@ -534,7 +534,7 @@ int MyInMemoryFS::fuseWrite(const char *path, const char *buf, size_t size, off_
     void* tmpdata = memcpy(myFsFiles[fileInfo->fh].data + offset, buf, size);
     if (tmpdata == nullptr) {
         LOG("memcpy failed");
-        RETURN(-1);
+        RETURN(-300);
     }
 
     myFsFiles[fileInfo->fh].atime.tv_sec = myFsFiles[fileInfo->fh].mtime.tv_sec = time(NULL);
@@ -583,18 +583,22 @@ int MyInMemoryFS::fuseTruncate(const char *path, off_t newSize) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
-    struct fuse_file_info *fileInfo;
-    int x = fuseOpen(path, fileInfo);
-    if (0 > x) {
-        RETURN(x);
-    }
-    x = fuseTruncate(path, newSize, fileInfo);
-    if (0 > x) {
-        RETURN(x);
-    }
-    x = fuseRelease(path, fileInfo);
+    int index = iFindFileIndex(path);
 
-    RETURN(x);
+    if (0 > index) {
+        RETURN(index);
+    }
+
+    LOGF("index: %ld, data: %ld, filepath: %s, filesize: %ld, timestamp: %ld", index, myFsFiles[index].data, myFsFiles[index].cPath, myFsFiles[index].size, myFsFiles[index].atime.tv_sec);
+    //index is valid onto given file
+    void* tmpdata = realloc(myFsFiles[index].data, newSize);
+    if (tmpdata != nullptr) {
+        LOGF("Realloc was succesful, size: %ld -> %ld, data: %ld -> %ld", myFsFiles[index].size, newSize, myFsFiles[index].data, (unsigned char*) tmpdata);
+        myFsFiles[index].data = (unsigned char*) tmpdata;
+        myFsFiles[index].size = newSize;
+        RETURN (0);
+    }
+    RETURN (-EAGAIN);
 }
 
 /// @brief Truncate a file.
@@ -612,23 +616,26 @@ int MyInMemoryFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file
 
     // TODO: [PART 1] Implement this!
     int x = iIsPathValid(path, fileInfo->fh);
+    int index = x;
     if (0 > x) {
         //find file with string
         x = iFindFileIndex(path);
         if (0 > x) {
-            //found file
-            void* tmpdata = realloc(myFsFiles[x].data, newSize);
-            if (tmpdata != nullptr) {
-                LOGF("Realloc was succesful, size: %ld -> %ld, data: %ld -> %ld", myFsFiles[fileInfo->fh].size, newSize, myFsFiles[fileInfo->fh].data, (unsigned char*) tmpdata);
-                myFsFiles[fileInfo->fh].data = (unsigned char*) tmpdata;
-                myFsFiles[fileInfo->fh].size = newSize;
-                RETURN (0);
-            }
-            RETURN (-EAGAIN);
+            //file not found
+            RETURN(-EEXIST);
         }
+        //found file
+        index = x;
     }
-
-    RETURN(-1);
+    //index is valid onto given file
+    void* tmpdata = realloc(myFsFiles[index].data, newSize);
+    if (tmpdata != nullptr) {
+        LOGF("Realloc was succesful, size: %ld -> %ld, data: %ld -> %ld", myFsFiles[fileInfo->fh].size, newSize, myFsFiles[fileInfo->fh].data, (unsigned char*) tmpdata);
+        myFsFiles[fileInfo->fh].data = (unsigned char*) tmpdata;
+        myFsFiles[fileInfo->fh].size = newSize;
+        RETURN (0);
+    }
+    RETURN (-EAGAIN);
 }
 
 /// @brief Read a directory.
@@ -717,15 +724,15 @@ void MyInMemoryFS::fuseDestroy() {
 
 int MyInMemoryFS::iIsPathValid(const char *path, uint64_t fh) {
     if (fh < 0 || fh >= NUM_DIR_ENTRIES) {
-        return (-1);
+        return (-100);
     }
     if (myFsEmpty[fh]) {
-        return (-1);
+        return (-100);
     }
     if (strcmp(path, myFsFiles[fh].cPath) == 0) {
         return (fh);
     }
-    return (-1);
+    return (-100);
 }
 
 int MyInMemoryFS::iFindEmptySpot()
