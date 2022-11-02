@@ -459,7 +459,7 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
 
     if (myFsFiles[index].size < size + offset)
     {
-        if (myFsFiles[index].size <= offset) {
+        if (myFsFiles[index].size < offset) {
             LOGF("Offset %ld is bigger than file size %ld", offset, myFsFiles[index].size);
             RETURN(-EINVAL);
         }
