@@ -111,6 +111,7 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     iCounterFiles++;
 
     LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myFsFiles[index].cPath, myFsFiles[index].size, myFsFiles[index].atime.tv_sec);
+    LOGF("iCounterFiles: %d", iCounterFiles);
 
     RETURN(0);
 }
@@ -126,6 +127,7 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
 
     // TODO: [PART 1] Implement this!
     int index = -1;
+    // Get index of file by  path
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
     {
         if (myFsEmpty[i]) {
@@ -155,6 +157,8 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     //iCounterOpen--;
     iCounterFiles--;
 
+    LOGF("iCounterFiles: %d", iCounterFiles);
+
     RETURN(0);
 }
 
@@ -170,6 +174,12 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
 int MyInMemoryFS::fuseRename(const char *path, const char *newpath) {
     LOGM();
     LOGF("Old filepath: %s, New filepath: %s", path, newpath);
+
+    //check length of new filename
+    if (strlen(newpath)-1 > NAME_LENGTH)
+    {
+        RETURN(-EINVAL);
+    }
 
     // TODO: [PART 1] Implement this!
     size_t index = -1;
@@ -201,9 +211,7 @@ int MyInMemoryFS::fuseRename(const char *path, const char *newpath) {
         return -ENOENT;
 
     LOGF("Index: %d", index);
-    //check length of new filename
-    if (strlen(newpath)-1 > NAME_LENGTH)
-        return -EINVAL;
+
 
     //overwrite fileinfo values
     strcpy(myFsFiles[index].cName, (newpath+1));
@@ -307,6 +315,7 @@ int MyInMemoryFS::fuseChmod(const char *path, mode_t mode) {
     // TODO: [PART 1] Implement this!
     size_t index = -1;
 
+    // Get index of file by  path
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
     {
         if (myFsEmpty[i]) {
