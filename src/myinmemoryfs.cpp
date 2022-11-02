@@ -68,33 +68,33 @@ MyInMemoryFS::~MyInMemoryFS() {
 int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
-
     //filesystem full?
-    if (iCounterFiles >= NUM_DIR_ENTRIES)
-        return -ENOSPC;
+    if (iCounterFiles >= NUM_DIR_ENTRIES) {
+        RETURN(-ENOSPC);
+    }
 
     //file with same name exists?
-    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
-    {
+    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++) {
         if (myFsEmpty[i]) {
             continue;
         }
         MyFsFileInfo info = myFsFiles[i];
-        if (strcmp(path, info.cPath) == 0)
-        {
-            return -EEXIST;
+        if (strcmp(path, info.cPath) == 0) {
+            RETURN(-EEXIST); // already exists
         }
     }
 
     //find index to put fileinfo in
     int index = iFindEmptySpot();
-    if (index < 0)
-        return index;
+    if (index < 0) {
+        RETURN(index);
+    }
 
     //check length of given filename
-    if (strlen(path)-1 > NAME_LENGTH)
-        return -EINVAL;
+    if (strlen(path) - 1 > NAME_LENGTH)
+    {
+        RETURN(-EINVAL);
+    }
 
     //overwrite all fileinfo values
     strcpy(myFsFiles[index].cName, (path+1));
@@ -111,6 +111,7 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     iCounterFiles++;
 
     LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myFsFiles[index].cPath, myFsFiles[index].size, myFsFiles[index].atime.tv_sec);
+    LOGF("iCounterFiles: %d", iCounterFiles);
 
     RETURN(0);
 }
@@ -124,8 +125,8 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
 int MyInMemoryFS::fuseUnlink(const char *path) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
     int index = -1;
+    // Get index of file by  path
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
     {
         if (myFsEmpty[i]) {
@@ -140,7 +141,9 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     }
 
     if (index < 0)
-        return -ENOENT;
+    {
+        RETURN(-ENOENT);
+    }
 
     LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myFsFiles[index].cPath, myFsFiles[index].size, myFsFiles[index].atime.tv_sec);
 
@@ -152,8 +155,9 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     myFsOpenFiles[index] = false;
     myFsEmpty[index] = true;
 
-    //iCounterOpen--;
     iCounterFiles--;
+
+    LOGF("iCounterFiles: %d", iCounterFiles);
 
     RETURN(0);
 }
@@ -171,39 +175,39 @@ int MyInMemoryFS::fuseRename(const char *path, const char *newpath) {
     LOGM();
     LOGF("Old filepath: %s, New filepath: %s", path, newpath);
 
-    // TODO: [PART 1] Implement this!
+    //check length of new filename
+    if (strlen(newpath) - 1 > NAME_LENGTH) {
+        RETURN(-EINVAL);
+    }
+
     size_t index = -1;
     bool bNewNameAlreadyInUse = false;
 
-    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
-    {
+    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++) {
         if (myFsEmpty[i]) {
             continue;
         }
         MyFsFileInfo info = myFsFiles[i];
-        if (strcmp(path, info.cPath) == 0)
-        {
+        if (strcmp(path, info.cPath) == 0) {
             index = i;
         }
-        if (strcmp(path, newpath) == 0)
-        {
+        if (strcmp(path, newpath) == 0) {
             bNewNameAlreadyInUse = true;
         }
     }
 
-    if (bNewNameAlreadyInUse)
-    {
+    if (bNewNameAlreadyInUse) {
         RETURN(-EEXIST);
     }
 
     // file found?
     if (index < 0)
-        return -ENOENT;
+    {
+        RETURN(-ENOENT);
+    }
 
     LOGF("Index: %d", index);
-    //check length of new filename
-    if (strlen(newpath)-1 > NAME_LENGTH)
-        return -EINVAL;
+
 
     //overwrite fileinfo values
     strcpy(myFsFiles[index].cName, (newpath+1));
@@ -225,7 +229,6 @@ int MyInMemoryFS::fuseRename(const char *path, const char *newpath) {
 int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
 
     LOGF( "\tAttributes of %s requested\n", path );
 
@@ -247,7 +250,6 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
     statbuf->st_uid = getuid(); // The owner of the file/directory is the user who mounted the filesystem
     statbuf->st_gid = getgid(); // The group of the file/directory is the same as the group of the user who mounted the filesystem
     statbuf->st_atime = time( NULL ); // The last "a"ccess of the file/directory is right now
-    //statbuf->st_mtime = time( NULL ); // The last "m"odification of the file/directory is right now
 
     int ret= 0;
 
@@ -275,15 +277,12 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
                 LOG("fuseGetAttr()");
                 LOG("filled statbuf with data");
                 LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", i, myFsFiles[i].cPath, myFsFiles[i].size, myFsFiles[i].atime.tv_sec);
-                return 0;
+                RETURN(0);
             }
         }
         LOG("havent found file in myFsFiles-array");
 
         ret= -ENOENT;
-        /*statbuf->st_mode = S_IFREG | 0644;
-        statbuf->st_nlink = 1;
-        statbuf->st_size = 1024;*/
     }
     else {
         LOG("path-length <= 0");
@@ -291,7 +290,6 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
     }
 
     RETURN(ret);
-    //return ret;
 }
 
 /// @brief Change file permissions.
@@ -304,9 +302,9 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
 int MyInMemoryFS::fuseChmod(const char *path, mode_t mode) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
     size_t index = -1;
 
+    // Get index of file by  path
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
     {
         if (myFsEmpty[i]) {
@@ -322,7 +320,9 @@ int MyInMemoryFS::fuseChmod(const char *path, mode_t mode) {
 
     // file found?
     if (index < 0)
-        return -ENOENT;
+    {
+        RETURN(-ENOENT);
+    }
 
     //overwrite fileinfo values
     myFsFiles[index].mode = mode;
@@ -343,7 +343,6 @@ int MyInMemoryFS::fuseChmod(const char *path, mode_t mode) {
 int MyInMemoryFS::fuseChown(const char *path, uid_t uid, gid_t gid) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
     size_t index = -1;
 
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
@@ -361,7 +360,9 @@ int MyInMemoryFS::fuseChown(const char *path, uid_t uid, gid_t gid) {
 
     // file found?
     if (index < 0)
-        return -ENOENT;
+    {
+        RETURN(-ENOENT);
+    }
 
     //overwrite fileinfo values
     myFsFiles[index].uid = uid;
@@ -383,9 +384,10 @@ int MyInMemoryFS::fuseChown(const char *path, uid_t uid, gid_t gid) {
 int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
     if (iCounterOpen >= NUM_OPEN_FILES)
-        return -EMFILE;
+    {
+        RETURN(-EMFILE);
+    }
 
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
     {
@@ -397,12 +399,11 @@ int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
         {
             if (myFsOpenFiles[i])
             {
-                return -EPERM; // Already Open
+                RETURN(-EPERM); // Already Open
             }
             else
             {
-                // TODO: Add struct info?
-
+                // Set Handle etc
                 myFsOpenFiles[i] = true;
                 fileInfo->fh = i; // can be used in fuseRead and fuseRelease
                 iCounterOpen++;
@@ -437,20 +438,20 @@ int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
 int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
-
     LOGF("--> Trying to read %s, %lu, %lu\n", path, (unsigned long) offset, size);
 
     int index = iIsPathValid(path, fileInfo->fh);
     if (index < 0)
-        return index;
+    {
+        RETURN(index);
+    }
 
     LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myFsFiles[index].cPath, myFsFiles[index].size,
          myFsFiles[index].atime.tv_sec);
 
     if (myFsFiles[index].size < size + offset)
     {
-        if (myFsFiles[index].size <= offset) {
+        if (myFsFiles[index].size < offset) {
             LOGF("Offset %ld is bigger than file size %ld", offset, myFsFiles[index].size);
             RETURN(-EINVAL);
         }
@@ -470,27 +471,6 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
         }
         RETURN(size);
     }
-
-    /*
-    char file54Text[] = "Hello World From File54!\n";
-    char file349Text[] = "Hello World From File349!\n";
-    char *selectedText = NULL;
-
-    // ... //
-
-    if ( strcmp( path, "/file54" ) == 0 )
-        selectedText = file54Text;
-    else if ( strcmp( path, "/file349" ) == 0 )
-        selectedText = file349Text;
-    else
-        return -ENOENT;
-
-    // ... //
-
-    memcpy( buf, selectedText + offset, size );
-
-    RETURN((int) (strlen( selectedText ) - offset));
-     */
 }
 
 /// @brief Write to a file.
@@ -511,7 +491,6 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
 int MyInMemoryFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
     if (0 > iIsPathValid(path, fileInfo->fh)){
         RETURN(iIsPathValid(path, fileInfo->fh));
     }
@@ -551,8 +530,6 @@ int MyInMemoryFS::fuseWrite(const char *path, const char *buf, size_t size, off_
 int MyInMemoryFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
-
     int valid = iIsPathValid(path, fileInfo->fh);
     if (valid < 0) {
         RETURN(valid);
@@ -582,7 +559,6 @@ int MyInMemoryFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo)
 int MyInMemoryFS::fuseTruncate(const char *path, off_t newSize) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
     int index = iFindFileIndex(path);
 
     if (0 > index) {
@@ -614,7 +590,6 @@ int MyInMemoryFS::fuseTruncate(const char *path, off_t newSize) {
 int MyInMemoryFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
     int x = iIsPathValid(path, fileInfo->fh);
     int index = x;
     if (0 > x) {
@@ -651,8 +626,6 @@ int MyInMemoryFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file
 int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
-
     LOGF( "--> Getting The List of Files of %s\n", path );
 
     filler( buf, ".", NULL, 0 ); // Current Directory
@@ -666,10 +639,6 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
                 filler( buf, myFsFiles[i].cName, NULL, 0);
             }
         }
-        /*
-        filler( buf, "file54", NULL, 0 );
-        filler( buf, "file349", NULL, 0 );
-        */
     }
 
     RETURN(0);
@@ -693,13 +662,11 @@ void* MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
 
         LOG("Using in-memory mode");
 
-        // TODO: [PART 1] Implement your initialization methods here
 
         iCounterFiles = iCounterOpen = 0;
         memset(&myFsFiles, 0, sizeof(myFsFiles));
         memset(&myFsEmpty, 1, sizeof(myFsEmpty));
         memset(&myFsOpenFiles, 0, sizeof(myFsOpenFiles));
-
     }
 
     RETURN(0);
@@ -711,16 +678,11 @@ void* MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
 void MyInMemoryFS::fuseDestroy() {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
-
     for (MyFsFileInfo file : myFsFiles) {
         LOGF("Freeing memory. filename: %s", file.cName);
         free(file.data);
     }
-
 }
-
-// TODO: [PART 1] You may add your own additional methods here!
 
 int MyInMemoryFS::iIsPathValid(const char *path, uint64_t fh) {
     if (fh < 0 || fh >= NUM_DIR_ENTRIES) {
