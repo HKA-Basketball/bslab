@@ -17,6 +17,10 @@ public:
     static MyOnDiskFS *Instance();
 
     // TODO: [PART 1] Add attributes of your file system here
+    SuperBlock mySuperBlock;
+    char myDmap[NUM_DATA_BLOCK_COUNT];      //Verzeichnis der freien Datenblöcke
+    int32_t myFAT[NUM_DATA_BLOCK_COUNT];    //File Allocation Table
+    MyFsDiskInfo myRoot[NUM_DIR_ENTRIES];
 
     MyOnDiskFS();
     ~MyOnDiskFS();
