@@ -43,7 +43,6 @@ struct MyFsFileInfo
 
 // Aufgabe 2.
 
-//sizeof(MyFsDiskInfo) == 304
 struct MyFsDiskInfo
 {
     char cName[NAME_LENGTH];    // Name
@@ -55,6 +54,8 @@ struct MyFsDiskInfo
     __time_t atime;	            // Time of last access.
     __time_t mtime;	            // Time of last modification.
     __time_t ctime;	            // Time of last status change.
+
+    char cPath[NAME_LENGTH+1];   // Path to the file
 };
 
 struct SuperBlock

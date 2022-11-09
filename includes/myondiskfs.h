@@ -21,6 +21,10 @@ public:
     char myDmap[NUM_DATA_BLOCK_COUNT];      //Verzeichnis der freien Datenblöcke
     int32_t myFAT[NUM_DATA_BLOCK_COUNT];    //File Allocation Table
     MyFsDiskInfo myRoot[NUM_DIR_ENTRIES];
+    bool myFsOpenFiles[NUM_DIR_ENTRIES];
+    bool myFsEmpty[NUM_DIR_ENTRIES];
+    unsigned int iCounterFiles;
+    unsigned int iCounterOpen;
 
     MyOnDiskFS();
     ~MyOnDiskFS();
@@ -46,7 +50,8 @@ public:
     virtual void fuseDestroy();
 
     // TODO: Add methods of your file system here
-
+    int iIsPathValid(const char *path, uint64_t fh);
+    int iFindEmptySpot();
 };
 
 #endif //MYFS_MYONDISKFS_H

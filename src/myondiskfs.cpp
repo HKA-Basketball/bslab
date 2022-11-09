@@ -324,6 +324,33 @@ void MyOnDiskFS::fuseDestroy() {
 }
 
 // TODO: [PART 2] You may add your own additional methods here!
+int MyOnDiskFS::iIsPathValid(const char *path, uint64_t fh) {
+    if (fh < 0 || fh >= NUM_DIR_ENTRIES) {
+        return (-1);
+    }
+    if (myFsEmpty[fh]) {
+        return (-1);
+    }
+    if (strcmp(path, myRoot[fh].cPath) == 0) {
+        return (fh);
+    }
+    return (-1);
+}
+
+int MyOnDiskFS::iFindEmptySpot()
+{
+    LOGM();
+    for (int i = 0; i < NUM_DIR_ENTRIES; i++)
+    {
+        if (myFsEmpty[i])
+        {
+            LOGF("index %ld is free", i);
+            RETURN(i);
+        }
+    }
+    LOG("NOT EMPTY BY FUNC");
+    RETURN(-ENOSPC);
+}
 
 // DO NOT EDIT ANYTHING BELOW THIS LINE!!!
 
