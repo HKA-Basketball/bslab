@@ -18,13 +18,14 @@ public:
 
     // TODO: [PART 1] Add attributes of your file system here
     SuperBlock mySuperBlock;
-    char myDmap[NUM_DATA_BLOCK_COUNT];      //Verzeichnis der freien Datenblöcke
+    char myDmap[NUM_DATA_BLOCK_COUNT];      //Verzeichnis der freien Datenblöcke, 1 = empty, 0 = occupied
     int32_t myFAT[NUM_DATA_BLOCK_COUNT];    //File Allocation Table
     MyFsDiskInfo myRoot[NUM_DIR_ENTRIES];
     bool myFsOpenFiles[NUM_DIR_ENTRIES];
-    bool myFsEmpty[NUM_DIR_ENTRIES];
+    bool myFsEmpty[NUM_DIR_ENTRIES]; //1 = empty, 0 = occupied
     unsigned int iCounterFiles;
     unsigned int iCounterOpen;
+    char *containerFilePath;
 
     MyOnDiskFS();
     ~MyOnDiskFS();
@@ -52,6 +53,7 @@ public:
     // TODO: Add methods of your file system here
     int iIsPathValid(const char *path, uint64_t fh);
     int iFindEmptySpot();
+    int syncStructures();
 };
 
 #endif //MYFS_MYONDISKFS_H

@@ -45,7 +45,6 @@ struct MyFsFileInfo
 
 struct MyFsDiskInfo
 {
-    char cName[NAME_LENGTH];    // Name
     size_t size;                // Data Size
     int32_t data;               // Block Pos
     __uid_t uid;                // User ID
@@ -54,17 +53,18 @@ struct MyFsDiskInfo
     __time_t atime;	            // Time of last access.
     __time_t mtime;	            // Time of last modification.
     __time_t ctime;	            // Time of last status change.
-
     char cPath[NAME_LENGTH+1];   // Path to the file
 };
 
 struct SuperBlock
 {
     //Informationen zum File-System (z.B. Größe, Positionen der Einträge unten...)
-    size_t size;
+    size_t infoSize;
+    size_t dataSize;
     int32_t blockPos;
     int32_t dmapPos;
     int32_t fatPos;
+    int32_t rootPos;
     int32_t dataPos;
 };
 

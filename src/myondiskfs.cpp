@@ -284,24 +284,48 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
 
         LOG("Using on-disk mode");
 
-        LOGF("Container file name: %s", ((MyFsInfo *) fuse_get_context()->private_data)->contFile);
+        containerFilePath = ((MyFsInfo *) fuse_get_context()->private_data)->contFile;
 
-        int ret= this->blockDevice->open(((MyFsInfo *) fuse_get_context()->private_data)->contFile);
+        LOGF("Container file name: %s", containerFilePath);
+
+        int ret= this->blockDevice->open(containerFilePath);
 
         if(ret >= 0) {
             LOG("Container file does exist, reading");
 
             // TODO: [PART 2] Read existing structures form file
+            syncStructures();
 
         } else if(ret == -ENOENT) {
             LOG("Container file does not exist, creating a new one");
 
-            ret = this->blockDevice->create(((MyFsInfo *) fuse_get_context()->private_data)->contFile);
+            ret = this->blockDevice->create(containerFilePath);
 
             if (ret >= 0) {
 
                 // TODO: [PART 2] Create empty structures in file
 
+                //initialise superblock
+                mySuperBlock.infoSize = POS_DATA;
+                mySuperBlock.dataSize = NUM_DATA_BLOCK_COUNT;
+                mySuperBlock.blockPos = POS_SPBLOCK;
+                mySuperBlock.dataPos = POS_DATA;
+                mySuperBlock.dmapPos = POS_DMAP;
+                mySuperBlock.rootPos = POS_ROOT;
+                mySuperBlock.fatPos = POS_FAT;
+
+                //initialise heap structures
+                memset(&myDmap, 1, sizeof(myDmap));
+                for (int i = 0; i < NUM_DATA_BLOCK_COUNT; i++) {
+                    myFAT[i] = -1;
+                }
+                memset(&myRoot, 0, sizeof(myRoot));
+                iCounterFiles = iCounterOpen = 0;
+                memset(&myFsEmpty, 1, sizeof(myFsEmpty));
+                memset(&myFsOpenFiles, 0, sizeof(myFsOpenFiles));
+
+                //sync to container
+                syncStructures();
             }
         }
 
@@ -324,6 +348,75 @@ void MyOnDiskFS::fuseDestroy() {
 }
 
 // TODO: [PART 2] You may add your own additional methods here!
+
+int MyOnDiskFS::syncStructures() {
+    LOGF("Synchronising Structures onto container %s ", containerFilePath);
+
+    //open container
+    int ret = this->blockDevice->open(containerFilePath);
+    LOG("opened container");
+    if (ret >= 0) {
+        char* buf = (char*) malloc(BLOCK_SIZE);
+        LOG("created buffer");
+
+        if (buf == nullptr) {
+            RETURN(-20);
+        }
+        LOG("checked for nullptr");
+
+        //write superblock
+        memset(buf, 0, BLOCK_SIZE);
+        LOG("cleared buffer");
+        memcpy(buf, &mySuperBlock, sizeof(SuperBlock));
+        LOG("memcopied superblock to buffer");
+        ret = this->blockDevice->write(POS_SPBLOCK, buf);
+        if (ret < 0) {
+            RETURN(ret);
+        }
+        LOG("wrote superblock");
+
+        /*
+        //write DMAP
+        for (int i = 0; i < BLOCKS_DMAP; i++) {
+            memcpy(buf, myDmap + i * BLOCK_SIZE,BLOCK_SIZE);
+            ret = this->blockDevice->write(POS_DMAP + i, buf);
+            if (ret < 0) {
+                RETURN(ret);
+            }
+        }
+        LOG("wrote DMAP");
+
+        //write FAT
+        for (int i = 0; i < BLOCKS_FAT; i++) {
+            memcpy(buf, myFAT + i * BLOCK_SIZE,BLOCK_SIZE);
+            ret = this->blockDevice->write(POS_FAT + i, buf);
+            if (i % 10000 == 0) {
+                LOGF("wrote %ld th block of FAT to container", i);
+            }
+            if (ret < 0) {
+                RETURN(ret);
+            }
+        }
+        LOG("wrote FAT");
+        //write Root
+        for (int i = 0; i < BLOCKS_ROOT; i++) {
+            memset(buf, 0, BLOCK_SIZE);
+            memcpy(buf, &myRoot[i],sizeof(MyFsDiskInfo));
+            ret = this->blockDevice->write(POS_ROOT + i, buf);
+            if (ret < 0) {
+                RETURN(ret);
+            }
+        }
+        LOG("wrote Root");
+        */
+
+        this->blockDevice->close();
+        RETURN(0);
+
+    }
+    RETURN(-10);
+}
+
 int MyOnDiskFS::iIsPathValid(const char *path, uint64_t fh) {
     if (fh < 0 || fh >= NUM_DIR_ENTRIES) {
         return (-1);
