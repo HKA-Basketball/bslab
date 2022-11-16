@@ -96,6 +96,7 @@ int MyOnDiskFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
 
     //increment file counter
     iCounterFiles++;
+    syncRoot();
 
     LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myRoot[index].cPath, myRoot[index].size, myRoot[index].atime);
     LOGF("iCounterFiles: %d", iCounterFiles);
@@ -767,7 +768,7 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
 
                 initializeHelpers();
 
-                //dumpStructures();
+                dumpStructures();
             }
 
 
@@ -783,7 +784,8 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
 
                 //initialise superblock
                 mySuperBlock.infoSize = POS_DATA;
-                mySuperBlock.dataSize = NUM_DATA_BLOCK_COUNT;
+                mySuperBlock.dataSize = NUM_DATA_BLOCK_COUNT * 512;
+                mySuperBlock.freeBlocks = NUM_DATA_BLOCK_COUNT;
                 mySuperBlock.blockPos = POS_SPBLOCK;
                 mySuperBlock.dataPos = POS_DATA;
                 mySuperBlock.dmapPos = POS_DMAP;
@@ -881,6 +883,70 @@ void MyOnDiskFS::fuseDestroy() {
 
 // TODO: [PART 2] You may add your own additional methods here!
 
+
+/// BLOCKDEVICE NEEDS TO BE OPEN
+/// \param num blck num with first datablock as 0
+/// \return
+int MyOnDiskFS::syncDmapFat(u_int32_t num) {
+    char* dmapPtr = &myDmap[num];
+    int32_t dmapBlock = num / BLOCK_SIZE;
+    u_int32_t dmapOffset = num % BLOCK_SIZE;
+    char* fatPtr = (char*)&myFAT[num];
+    int32_t fatBlock = num * sizeof(int32_t) / BLOCK_SIZE;
+    u_int32_t fatOffset = num * sizeof(int32_t) % BLOCK_SIZE;
+
+    char blockBuf[512];
+    int blkDev = this->blockDevice->read(dmapBlock, blockBuf);
+    if (blkDev < 0) {
+        LOG("reading dmapBlock failed");
+        RETURN(-10000);
+    }
+    void* ptr = memcpy(blockBuf + dmapOffset, dmapPtr, 1);
+    if (ptr == nullptr) {
+        LOG("memcpy of dmapBlock failed");
+        RETURN(-10000);
+    }
+    blkDev = this->blockDevice->write(dmapBlock, blockBuf);
+    if (blkDev < 0) {
+        LOG("writing dmapBlock failed");
+        RETURN(-10000);
+    }
+
+    blkDev = this->blockDevice->read(fatBlock, blockBuf);
+    if (blkDev < 0) {
+        LOG("reading fatBlock failed");
+        RETURN(-10000);
+    }
+    ptr = memcpy(blockBuf + fatOffset, fatPtr, sizeof(int32_t));
+    if (ptr == nullptr) {
+        LOG("memcpy of fatBlock failed");
+        RETURN(-10000);
+    }
+    blkDev = this->blockDevice->write(fatBlock, blockBuf);
+    if (blkDev < 0) {
+        LOG("writing fatBlock failed");
+        RETURN(-10000);
+    }
+}
+
+size_t MyOnDiskFS::findFreeBlock() {
+    if (mySuperBlock.freeBlocks == 0) {
+        return ERROR_BLOCKNUMBER;
+    }
+
+    for (size_t i = 0; i < NUM_DATA_BLOCK_COUNT; i++)
+    {
+        if (myDmap[i] == 1)
+        {
+            memset(&myDmap[i], 0, sizeof(char));
+            mySuperBlock.freeBlocks--;
+            return i;
+        }
+    }
+
+    return ERROR_BLOCKNUMBER;
+}
+
 void MyOnDiskFS::initializeHelpers() {
     for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
         myFsOpenFiles[i] = false;
@@ -902,12 +968,13 @@ void MyOnDiskFS::dumpStructures() {
     LOGF("Dumping Superblock:\n"
          "                mySuperBlock.infoSize = %ld;\n"
          "                mySuperBlock.dataSize = %ld;\n"
+         "                mySuperBlock.freeBlocks = %ld;\n"
          "                mySuperBlock.blockPos = %ld;\n"
          "                mySuperBlock.dataPos = %ld;\n"
          "                mySuperBlock.dmapPos = %ld;\n"
          "                mySuperBlock.rootPos = %ld;\n"
          "                mySuperBlock.fatPos = %ld;",
-         mySuperBlock.infoSize, mySuperBlock.dataSize, mySuperBlock.blockPos,
+         mySuperBlock.infoSize, mySuperBlock.dataSize, mySuperBlock.freeBlocks, mySuperBlock.blockPos,
          mySuperBlock.dataPos, mySuperBlock.dmapPos, mySuperBlock.rootPos, mySuperBlock.fatPos);
     LOG("Dumping DMAP");
     for (int i = 0; i < NUM_DATA_BLOCK_COUNT; i++) {

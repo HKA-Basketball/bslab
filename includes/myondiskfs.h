@@ -51,8 +51,9 @@ public:
     virtual void fuseDestroy();
 
     // TODO: Add methods of your file system here
-    void dumpStructures();
+    size_t findFreeBlock();
     void initializeHelpers();
+    void dumpStructures();
     int syncRoot();
     int syncDmapFat(u_int32_t num);
     int containerFull(size_t size, off_t offset);
