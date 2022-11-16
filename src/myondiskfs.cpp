@@ -128,8 +128,46 @@ int MyOnDiskFS::fuseUnlink(const char *path) {
 /// \return 0 on success, -ERRNO on failure.
 int MyOnDiskFS::fuseRename(const char *path, const char *newpath) {
     LOGM();
+    LOGF("Old filepath: %s, New filepath: %s", path, newpath);
 
-    // TODO: [PART 2] Implement this!
+    //check length of new filename
+    if (strlen(newpath) - 1 > NAME_LENGTH) {
+        RETURN(-EINVAL);
+    }
+
+    size_t index = -1;
+    bool bNewNameAlreadyInUse = false;
+
+    for (size_t i = 0; i < NUM_DIR_ENTRIES; i++) {
+        if (myFsEmpty[i]) {
+            continue;
+        }
+        if (strcmp(path, myRoot[i].cPath) == 0) {
+            index = i;
+        }
+        if (strcmp(path, newpath) == 0) {
+            bNewNameAlreadyInUse = true;
+        }
+    }
+
+    if (bNewNameAlreadyInUse) {
+        RETURN(-EEXIST);
+    }
+
+    // file found?
+    if (index < 0) {
+        RETURN(-ENOENT);
+    }
+
+    LOGF("Index: %d", index);
+
+    //overwrite fileinfo values
+    strcpy(myRoot[index].cPath, newpath);
+    myRoot[index].atime = myRoot[index].ctime = myRoot[index].mtime = time(NULL);
+
+    syncRoot();
+
+    LOGF("Index Changed: %d", index);
 
     RETURN(0);
 }
@@ -535,7 +573,7 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
                         LOGF("ERROR: blockDevice couldn't read DMAP %d", ret);
                         RETURN(nullptr);
                     }
-                    retPtr = memcpy(myDmap + i * BLOCK_SIZE, buf,BLOCK_SIZE);
+                    retPtr = memcpy(myDmap + i * BLOCK_SIZE, buf, BLOCK_SIZE);
                     if (retPtr == nullptr) {
                         LOG("memcpy of DMAP failed");
                         RETURN(retPtr);
@@ -550,7 +588,7 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
                         LOGF("ERROR: blockDevice couldn't read FAT %d", ret);
                         RETURN(nullptr);
                     }
-                    retPtr = memcpy(((char*)myFAT) + i * BLOCK_SIZE, buf,BLOCK_SIZE);
+                    retPtr = memcpy(((char*)myFAT) + i * BLOCK_SIZE, buf, BLOCK_SIZE);
                     if (retPtr == nullptr) {
                         LOG("memcpy of FAT failed");
                         RETURN(retPtr);
