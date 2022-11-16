@@ -51,6 +51,8 @@ public:
     virtual void fuseDestroy();
 
     // TODO: Add methods of your file system here
+    void dumpStructures();
+    int syncRoot();
     int iIsPathValid(const char *path, uint64_t fh);
     int iFindEmptySpot();
 };
