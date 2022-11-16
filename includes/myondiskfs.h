@@ -54,6 +54,8 @@ public:
     void dumpStructures();
     void initializeHelpers();
     int syncRoot();
+    int syncDmapFat(u_int32_t num);
+    int containerFull(size_t size, off_t offset);
     int iIsPathValid(const char *path, uint64_t fh);
     int iFindEmptySpot();
 };

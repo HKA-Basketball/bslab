@@ -24,6 +24,7 @@
 #define POS_ROOT POS_FAT + BLOCKS_FAT
 #define POS_DATA POS_ROOT + BLOCKS_ROOT
 #define POS_NULLPTR -124 //used for empty files which need a blocknumber
+#define ERROR_BLOCKNUMBER 4294967296 // 2^32
 
 // TODO: Add structures of your file system here
 struct MyFsFileInfo
@@ -62,6 +63,7 @@ struct SuperBlock
     //Informationen zum File-System (z.B. Größe, Positionen der Einträge unten...)
     size_t infoSize;
     size_t dataSize;
+    size_t freeBlocks; // number of free blocks
     int32_t blockPos;
     int32_t dmapPos;
     int32_t fatPos;
