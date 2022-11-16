@@ -295,6 +295,84 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
 
             // TODO: [PART 2] Read existing structures form file
 
+            //open container
+            ret = this->blockDevice->open(containerFilePath);
+            LOG("opened container");
+            if (ret >= 0) {
+                char* buf = (char*) malloc(BLOCK_SIZE);
+                LOG("created buffer");
+
+                if (buf == nullptr) {
+                    LOGF("ERROR: Buf is null %d", ret);
+                    RETURN(nullptr);
+                }
+                LOG("checked for nullptr");
+
+                void* retPtr = nullptr;
+
+                //read superblock
+                ret = this->blockDevice->read(POS_SPBLOCK, buf);
+                if (ret >= 0) {
+                    LOG("read superblock from container");
+                    retPtr = memcpy(&mySuperBlock, buf, sizeof(SuperBlock));
+                    if (retPtr == nullptr) {
+                        LOG("memcpy of superblock failed");
+                        RETURN(retPtr);
+                    }
+                    LOG("successfully read superblock");
+                }
+
+                //read DMAP
+                for(int i = 0; i < BLOCKS_DMAP; i++) {
+                    ret = this->blockDevice->read(POS_DMAP + i, buf);
+                    if (ret < 0) {
+                        LOGF("ERROR: blockDevice couldn't read DMAP %d", ret);
+                        RETURN(nullptr);
+                    }
+                    retPtr = memcpy(myDmap + i * BLOCK_SIZE, buf,BLOCK_SIZE);
+                    if (retPtr == nullptr) {
+                        LOG("memcpy of DMAP failed");
+                        RETURN(retPtr);
+                    }
+                }
+                LOG("successfully read DMAP");
+
+                //read FAT
+                for (int i = 0; i < BLOCKS_FAT; i++) {
+                    ret = this->blockDevice->read(POS_FAT + i, buf);
+                    if (ret < 0) {
+                        LOGF("ERROR: blockDevice couldn't read FAT %d", ret);
+                        RETURN(nullptr);
+                    }
+                    retPtr = memcpy(((char*)myFAT) + i * BLOCK_SIZE, buf,BLOCK_SIZE);
+                    if (retPtr == nullptr) {
+                        LOG("memcpy of FAT failed");
+                        RETURN(retPtr);
+                    }
+                }
+                LOG("successfully read FAT");
+
+                //read Root
+                for (int i = 0; i < BLOCKS_ROOT; i++) {
+                    ret = this->blockDevice->read(POS_ROOT + i, buf);
+                    if (ret < 0) {
+                        LOGF("ERROR: blockDevice couldn't read Root %d", ret);
+                        RETURN(nullptr);
+                    }
+                    retPtr = memcpy(&myRoot[i], buf, sizeof(MyFsDiskInfo));
+                    if (retPtr == nullptr) {
+                        LOG("memcpy of Root failed");
+                        RETURN(retPtr);
+                    }
+                }
+                LOG("successfully read Root");
+                this->blockDevice->close();
+                LOG("closed container");
+                dumpStructures();
+            }
+
+
+
         } else if(ret == -ENOENT) {
             LOG("Container file does not exist, creating a new one");
 
@@ -323,6 +401,7 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
                 memset(&myFsEmpty, 1, sizeof(myFsEmpty));
                 memset(&myFsOpenFiles, 0, sizeof(myFsOpenFiles));
 
+                dumpStructures();
                 //sync to container
 
                 //open container
@@ -365,9 +444,6 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
                     for (int i = 0; i < BLOCKS_FAT; i++) {
                         memcpy(buf, ((char*)myFAT) + i * BLOCK_SIZE,BLOCK_SIZE);
                         ret = this->blockDevice->write(POS_FAT + i, buf);
-                        if (i % (1024*256) == 0) {
-                            LOGF("wrote %ld th block of FAT to container", i);
-                        }
                         if (ret < 0) {
                             LOGF("ERROR: blockDevice couldn't write FAT %d", ret);
                             RETURN(nullptr);
@@ -401,6 +477,47 @@ void MyOnDiskFS::fuseDestroy() {
 }
 
 // TODO: [PART 2] You may add your own additional methods here!
+
+void MyOnDiskFS::dumpStructures() {
+    LOG("Dumping structures");
+    LOGF("Dumping Superblock:\n"
+         "                mySuperBlock.infoSize = %ld;\n"
+         "                mySuperBlock.dataSize = %ld;\n"
+         "                mySuperBlock.blockPos = %ld;\n"
+         "                mySuperBlock.dataPos = %ld;\n"
+         "                mySuperBlock.dmapPos = %ld;\n"
+         "                mySuperBlock.rootPos = %ld;\n"
+         "                mySuperBlock.fatPos = %ld;",
+         mySuperBlock.infoSize, mySuperBlock.dataSize, mySuperBlock.blockPos,
+         mySuperBlock.dataPos, mySuperBlock.dmapPos, mySuperBlock.rootPos, mySuperBlock.fatPos);
+    LOG("Dumping DMAP");
+    for (int i = 0; i < NUM_DATA_BLOCK_COUNT; i++) {
+        if (i % (1024*1024*16) == 0) {
+            LOGF("myDmap[%ld] = %ld", i, myDmap[i]);
+        }
+    }
+    LOG("Dumping FAT");
+    for (int i = 0; i < NUM_DATA_BLOCK_COUNT; i++) {
+        if (i % (1024*1024*16) == 0) {
+            LOGF("myFAT[%ld] = %d", i, myFAT[i]);
+        }
+    }
+    LOG("Dumping Root");
+    for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
+        LOGF("File %ld:"
+             "    size_t size = %ld\n"
+             "    int32_t data = %ld\n"
+             "    __uid_t uid = %ld\n"
+             "    __gid_t gid = %ld\n"
+             "    __mode_t mode = %ld\n"
+             "    __time_t atime = %ld\n"
+             "    __time_t mtime = %ld\n"
+             "    __time_t ctime = %ld\n"
+             "    char cPath[NAME_LENGTH+1] = %s", i, myRoot[i].size, myRoot[i].data,
+             myRoot[i].uid, myRoot[i].gid, myRoot[i].mode, myRoot[i].atime, myRoot[i].mtime, myRoot[i].ctime);
+    }
+    LOG("END OF Dumping structures");
+}
 
 int MyOnDiskFS::syncRoot() {
     LOGF("Synchronising Structures onto container %s ", containerFilePath);
