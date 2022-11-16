@@ -294,7 +294,6 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
             LOG("Container file does exist, reading");
 
             // TODO: [PART 2] Read existing structures form file
-            syncStructures();
 
         } else if(ret == -ENOENT) {
             LOG("Container file does not exist, creating a new one");
@@ -325,7 +324,61 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
                 memset(&myFsOpenFiles, 0, sizeof(myFsOpenFiles));
 
                 //sync to container
-                syncStructures();
+
+                //open container
+                ret = this->blockDevice->open(containerFilePath);
+                LOG("opened container");
+                if (ret >= 0) {
+                    char* buf = (char*) malloc(BLOCK_SIZE);
+                    LOG("created buffer");
+
+                    if (buf == nullptr) {
+                        LOGF("ERROR: Buf is null %d", ret);
+                        RETURN(nullptr);
+                    }
+                    LOG("checked for nullptr");
+
+                    //write superblock
+                    memset(buf, 0, BLOCK_SIZE);
+                    LOG("cleared buffer");
+                    memcpy(buf, &mySuperBlock, sizeof(SuperBlock));
+                    LOG("memcopied superblock to buffer");
+                    ret = this->blockDevice->write(POS_SPBLOCK, buf);
+                    if (ret < 0) {
+                        LOGF("ERROR: blockDevice couldn't write superblock %d", ret);
+                        RETURN(nullptr);
+                    }
+                    LOG("wrote superblock");
+
+                    //write DMAP
+                    for (int i = 0; i < BLOCKS_DMAP; i++) {
+                        memcpy(buf, myDmap + i * BLOCK_SIZE,BLOCK_SIZE);
+                        ret = this->blockDevice->write(POS_DMAP + i, buf);
+                        if (ret < 0) {
+                            LOGF("ERROR: blockDevice couldn't write DMAP %d", ret);
+                            RETURN(nullptr);
+                        }
+                    }
+                    LOG("wrote DMAP");
+
+                    //write FAT
+                    for (int i = 0; i < BLOCKS_FAT; i++) {
+                        memcpy(buf, ((char*)myFAT) + i * BLOCK_SIZE,BLOCK_SIZE);
+                        ret = this->blockDevice->write(POS_FAT + i, buf);
+                        if (i % (1024*256) == 0) {
+                            LOGF("wrote %ld th block of FAT to container", i);
+                        }
+                        if (ret < 0) {
+                            LOGF("ERROR: blockDevice couldn't write FAT %d", ret);
+                            RETURN(nullptr);
+                        }
+                    }
+                    LOG("wrote FAT");
+
+                    this->blockDevice->close();
+                }
+
+                syncRoot();
             }
         }
 
@@ -349,7 +402,7 @@ void MyOnDiskFS::fuseDestroy() {
 
 // TODO: [PART 2] You may add your own additional methods here!
 
-int MyOnDiskFS::syncStructures() {
+int MyOnDiskFS::syncRoot() {
     LOGF("Synchronising Structures onto container %s ", containerFilePath);
 
     //open container
@@ -364,40 +417,6 @@ int MyOnDiskFS::syncStructures() {
         }
         LOG("checked for nullptr");
 
-        //write superblock
-        memset(buf, 0, BLOCK_SIZE);
-        LOG("cleared buffer");
-        memcpy(buf, &mySuperBlock, sizeof(SuperBlock));
-        LOG("memcopied superblock to buffer");
-        ret = this->blockDevice->write(POS_SPBLOCK, buf);
-        if (ret < 0) {
-            RETURN(ret);
-        }
-        LOG("wrote superblock");
-
-        /*
-        //write DMAP
-        for (int i = 0; i < BLOCKS_DMAP; i++) {
-            memcpy(buf, myDmap + i * BLOCK_SIZE,BLOCK_SIZE);
-            ret = this->blockDevice->write(POS_DMAP + i, buf);
-            if (ret < 0) {
-                RETURN(ret);
-            }
-        }
-        LOG("wrote DMAP");
-
-        //write FAT
-        for (int i = 0; i < BLOCKS_FAT; i++) {
-            memcpy(buf, myFAT + i * BLOCK_SIZE,BLOCK_SIZE);
-            ret = this->blockDevice->write(POS_FAT + i, buf);
-            if (i % 10000 == 0) {
-                LOGF("wrote %ld th block of FAT to container", i);
-            }
-            if (ret < 0) {
-                RETURN(ret);
-            }
-        }
-        LOG("wrote FAT");
         //write Root
         for (int i = 0; i < BLOCKS_ROOT; i++) {
             memset(buf, 0, BLOCK_SIZE);
@@ -408,7 +427,6 @@ int MyOnDiskFS::syncStructures() {
             }
         }
         LOG("wrote Root");
-        */
 
         this->blockDevice->close();
         RETURN(0);
