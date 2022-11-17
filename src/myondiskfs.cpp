@@ -482,15 +482,15 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
                     LOG("can't find free block. THIS SHOULD NOT OCCUR!");
                     RETURN(-ENOSPC);
                 }
-                //TODO: myFAT is still wrong on container it is "FF" for blocks it shouldn't be
-                //weird behaviour: myFAT[n] is always (2^32 - 1) instead of the real value
+
                 LOGF("i = %ld, iterBlock = %ld, tmpBlock = %ld", i, iterBlock, tmpBlock);
                 myFAT[iterBlock] = (int32_t)tmpBlock;
-                iterBlock = myFAT[iterBlock];
                 LOGF("iterBlock = %ld, myFAT[iterBlock] = %ld", iterBlock, myFAT[iterBlock]);
-
                 // Sync DMAP & FAT
-                syncDmapFat(tmpBlock);
+                syncDmapFat(iterBlock);
+                // Set next Block
+                iterBlock = myFAT[iterBlock];
+                LOGF("iterBlock = %ld, myFAT[iterBlock] = %ld (Should be 0xFF (4.294.967.295) since it should be a free area)", iterBlock, myFAT[iterBlock]);
             }
         }
     }
@@ -909,6 +909,8 @@ void MyOnDiskFS::fuseDestroy() {
 /// \return
 int MyOnDiskFS::syncDmapFat(u_int32_t num) {
     LOGM();
+    LOG("Sync DMAP and FAT");
+    LOGF("num = %ld", num);
     char* dmapPtr = &myDmap[num];
     int32_t dmapBlock = num / BLOCK_SIZE;
     u_int32_t dmapOffset = num % BLOCK_SIZE;
