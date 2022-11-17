@@ -474,7 +474,6 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
                     RETURN(-ENOSPC);
                 }
                 myFAT[iterBlock] = tmpBlock;
-                this->blockDevice->write(POS_FAT + tmpBlock, (char*)tmpBlock);
                 iterBlock = myFAT[iterBlock];
 
                 // Sync DMAP & FAT
@@ -514,13 +513,18 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
                 LOG("memcpy of of first bytes of buf");
                 RETURN(-4000);
             }
-            this->blockDevice->write(offsetBlock, blockBuf);
+            this->blockDevice->write(POS_DATA + offsetBlock, blockBuf);
+            iterBlock = myFAT[iterBlock];
         }
 
         //write full blocks with no prefix and no suffix (writing from 0th byte in block to the 511th)
         LOG("Writing full blocks");
         for (int i = 0; i < NUM_DATA_BLOCK_COUNT; i++) {
-            this->blockDevice->write(iterBlock, iterBuf);
+            if(iterBuf > bufEND - BLOCK_SIZE || iterBlock == -1) {
+                LOG("wrote all full blocks");
+                break;
+            }
+            this->blockDevice->write(POS_DATA + iterBlock, iterBuf);
             iterBuf += BLOCK_SIZE;
             iterBlock = myFAT[iterBlock];
         }
@@ -532,7 +536,9 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
             LOG("memcpy of iterBuf till end of buf failed");
             RETURN(-4000);
         }
-        this->blockDevice->write(iterBlock, blockBuf);
+        if (iterBlock != -1) {
+            this->blockDevice->write(POS_DATA + iterBlock, blockBuf);
+        }
 
         LOG("sync superblock");
         memset(blockBuf, 0, BLOCK_SIZE);
@@ -900,7 +906,7 @@ int MyOnDiskFS::syncDmapFat(u_int32_t num) {
         RETURN(-10000);
     }
 
-    blkDev = this->blockDevice->read(fatBlock, blockBuf);
+    blkDev = this->blockDevice->read(POS_FAT + fatBlock, blockBuf);
     if (blkDev < 0) {
         LOG("reading fatBlock failed");
         RETURN(-10000);
