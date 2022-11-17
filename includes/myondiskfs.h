@@ -19,7 +19,14 @@ public:
     // TODO: [PART 1] Add attributes of your file system here
     SuperBlock mySuperBlock;
     char myDmap[NUM_DATA_BLOCK_COUNT];      //Verzeichnis der freien Datenblöcke, 1 = empty, 0 = occupied
-    int32_t myFAT[NUM_DATA_BLOCK_COUNT];    //File Allocation Table
+    /*
+     *  myDmap[n] holds information about the nth block INSIDE the data segment, meaning it is indexed with 0 being the start of the data segment
+     */
+    int32_t myFAT[NUM_DATA_BLOCK_COUNT];    //File Allocation Table FAT
+    /*
+     *  myFAT[0] returns what block comes after. It is indexed with 0 being the start of the data segment
+     *  If one wants to traverse through the FAT, one can simply myFAT[myFAT[myFAT[n]]] do like this, meaning no arithmetics between iterations are needed
+     */
     MyFsDiskInfo myRoot[NUM_DIR_ENTRIES];
     bool myFsOpenFiles[NUM_DIR_ENTRIES];
     bool myFsEmpty[NUM_DIR_ENTRIES]; //1 = empty, 0 = occupied

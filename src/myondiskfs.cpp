@@ -427,7 +427,6 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
     }
 
     MyFsDiskInfo* info = &myRoot[fileInfo->fh];
-    u_int32_t iterBlock = info->data;
     size_t totalNeededBlocks = ceil((size+offset)/BLOCK_SIZE);
     size_t haveBlocks = ceil(info->size/BLOCK_SIZE);
 
@@ -499,17 +498,18 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
             iterBlock = tmpBlock;
             offsetBlock = iterBlock;
         }
-        //offset is inside iterBlock
         LOG("start to write");
         char* iterBuf = (char*)buf;
         char* bufEND = (char*)(buf + size); //first invalid adress after buf
         char blockBuf[BLOCK_SIZE];
         void* tmpPtr = nullptr;
 
+        //offset is inside iterBlock
         if (offsetByte > 0) {
             LOG("need to read prefix, overwrite it and save it");
-            this->blockDevice->read(offsetBlock, blockBuf);
-            tmpPtr = memcpy(blockBuf + offsetByte, buf, BLOCK_SIZE - offsetByte);
+            this->blockDevice->read(POS_DATA + offsetBlock, blockBuf);
+            tmpPtr = memcpy(blockBuf + offsetByte, iterBuf, BLOCK_SIZE - offsetByte);
+            iterBuf += BLOCK_SIZE - offsetByte;
             if (tmpPtr == nullptr) {
                 LOG("memcpy of of first bytes of buf");
                 RETURN(-4000);
@@ -523,10 +523,6 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
             this->blockDevice->write(iterBlock, iterBuf);
             iterBuf += BLOCK_SIZE;
             iterBlock = myFAT[iterBlock];
-            if(iterBuf > bufEND - BLOCK_SIZE) {
-                LOG("wrote all full blocks");
-                break;
-            }
         }
 
         LOG("write last block");
@@ -538,20 +534,10 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
         }
         this->blockDevice->write(iterBlock, blockBuf);
 
-        char* buf = (char*) malloc(BLOCK_SIZE);
-        LOG("created buffer");
-
-        if (buf == nullptr) {
-            LOGF("ERROR: Buf is null %d", ret);
-            RETURN(-4000);
-        }
-        LOG("checked for nullptr");
-        //write superblock
-        memset(buf, 0, BLOCK_SIZE);
-        LOG("cleared buffer");
-        memcpy(buf, &mySuperBlock, sizeof(SuperBlock));
-        LOG("memcopied superblock to buffer");
-        ret = this->blockDevice->write(POS_SPBLOCK, buf);
+        LOG("sync superblock");
+        memset(blockBuf, 0, BLOCK_SIZE);
+        memcpy(blockBuf, &mySuperBlock, sizeof(SuperBlock));
+        ret = this->blockDevice->write(POS_SPBLOCK, blockBuf);
         if (ret < 0) {
             LOGF("ERROR: blockDevice couldn't write superblock %d", ret);
             RETURN(-4000);
@@ -765,6 +751,7 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
                 LOG("successfully read Root");
                 this->blockDevice->close();
                 LOG("closed container");
+                free(buf);
 
                 initializeHelpers();
 
@@ -857,6 +844,7 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
                     LOG("wrote FAT");
 
                     this->blockDevice->close();
+                    free(buf);
                 }
 
                 syncRoot();
@@ -896,7 +884,7 @@ int MyOnDiskFS::syncDmapFat(u_int32_t num) {
     u_int32_t fatOffset = num * sizeof(int32_t) % BLOCK_SIZE;
 
     char blockBuf[512];
-    int blkDev = this->blockDevice->read(dmapBlock, blockBuf);
+    int blkDev = this->blockDevice->read(POS_DMAP + dmapBlock, blockBuf);
     if (blkDev < 0) {
         LOG("reading dmapBlock failed");
         RETURN(-10000);
@@ -906,7 +894,7 @@ int MyOnDiskFS::syncDmapFat(u_int32_t num) {
         LOG("memcpy of dmapBlock failed");
         RETURN(-10000);
     }
-    blkDev = this->blockDevice->write(dmapBlock, blockBuf);
+    blkDev = this->blockDevice->write(POS_DMAP + dmapBlock, blockBuf);
     if (blkDev < 0) {
         LOG("writing dmapBlock failed");
         RETURN(-10000);
@@ -922,7 +910,7 @@ int MyOnDiskFS::syncDmapFat(u_int32_t num) {
         LOG("memcpy of fatBlock failed");
         RETURN(-10000);
     }
-    blkDev = this->blockDevice->write(fatBlock, blockBuf);
+    blkDev = this->blockDevice->write(POS_FAT + fatBlock, blockBuf);
     if (blkDev < 0) {
         LOG("writing fatBlock failed");
         RETURN(-10000);
@@ -1044,6 +1032,7 @@ int MyOnDiskFS::syncRoot() {
         LOG("wrote Root");
 
         this->blockDevice->close();
+        free(buf);
         RETURN(0);
 
     }
