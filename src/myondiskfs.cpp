@@ -482,8 +482,12 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
                     LOG("can't find free block. THIS SHOULD NOT OCCUR!");
                     RETURN(-ENOSPC);
                 }
-                myFAT[iterBlock] = tmpBlock;
+                //TODO: myFAT is still wrong on container it is "FF" for blocks it shouldn't be
+                //weird behaviour: myFAT[n] is always (2^32 - 1) instead of the real value
+                LOGF("i = %ld, iterBlock = %ld, tmpBlock = %ld", i, iterBlock, tmpBlock);
+                myFAT[iterBlock] = (int32_t)tmpBlock;
                 iterBlock = myFAT[iterBlock];
+                LOGF("iterBlock = %ld, myFAT[iterBlock] = %ld", iterBlock, myFAT[iterBlock]);
 
                 // Sync DMAP & FAT
                 syncDmapFat(tmpBlock);
@@ -579,6 +583,8 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
     syncRoot();
 
     this->blockDevice->close();
+
+    dumpStructures();
 
     RETURN(0);
 }
@@ -909,6 +915,7 @@ int MyOnDiskFS::syncDmapFat(u_int32_t num) {
     char* fatPtr = (char*)&myFAT[num];
     int32_t fatBlock = num * sizeof(int32_t) / BLOCK_SIZE;
     u_int32_t fatOffset = num * sizeof(int32_t) % BLOCK_SIZE;
+    LOGF("fatPtr = %X, fatBlock = %ld, fatOffset = %ld", fatPtr, fatBlock, fatOffset);
 
     char blockBuf[512];
     int blkDev = this->blockDevice->read(POS_DMAP + dmapBlock, blockBuf);
@@ -933,6 +940,7 @@ int MyOnDiskFS::syncDmapFat(u_int32_t num) {
         RETURN(-10000);
     }
     ptr = memcpy(blockBuf + fatOffset, fatPtr, sizeof(int32_t));
+    LOGF("fatPtr = %ld", (int32_t)(*fatPtr));
     if (ptr == nullptr) {
         LOG("memcpy of fatBlock failed");
         RETURN(-10000);
@@ -942,6 +950,7 @@ int MyOnDiskFS::syncDmapFat(u_int32_t num) {
         LOG("writing fatBlock failed");
         RETURN(-10000);
     }
+    RETURN(0);
 }
 
 size_t MyOnDiskFS::findFreeBlock() {
