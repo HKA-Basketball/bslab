@@ -63,11 +63,13 @@ int MyOnDiskFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     }
 
     //file with same name exists?
+    // TODO: does not work as intended
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++) {
         if (myFsEmpty[i]) {
             continue;
         }
         MyFsDiskInfo info = myRoot[i];
+        LOGF("comparing path = %s, info.cPath = %s, strcmp(path, info.cPath) = %ld", path, info.cPath, strcmp(path, info.cPath));
         if (strcmp(path, info.cPath) == 0) {
             RETURN(-EEXIST); // already exists
         }
@@ -393,8 +395,84 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
     LOGM();
 
     // TODO: [PART 2] Implement this!
+    if (0 > iIsPathValid(path, fileInfo->fh)){
+        RETURN(iIsPathValid(path, fileInfo->fh));
+    }
 
-    RETURN(0);
+    //open container
+    int ret = this->blockDevice->open(containerFilePath);
+    LOG("opened container");
+    if (ret < 0) {
+        RETURN(-3000);
+    }
+
+    MyFsDiskInfo* info = &myRoot[fileInfo->fh];
+
+    LOGF("Trying to read from path = %s, size = %ld, offset = %ld",path, size, offset);
+
+    int32_t iterBlock = info->data; // Block number where we are in container right now
+    off_t iterByte = offset; // offset inside Block from container to read
+    off_t bufByte = 0; //offset inside the buf Buffer
+    char blockBuf[BLOCK_SIZE];  //buffer to read block into
+    size_t leftToRead = size; //number of Bytes we still need to read
+    if (size + offset > info->size) {
+        LOGF("Trying to read to the %ld th byte which is more than info->size = %ld, reading all of file instead", size+offset, info->size);
+        leftToRead = info->size;
+    }
+
+    LOGF("iterBlock = %ld, iterByte = %ld, bufByte = %ld, leftToRead = %ld", iterBlock, iterByte, bufByte, leftToRead);
+    LOGF("lefToRead = %ld", leftToRead);
+
+    //failsafe condition "i < (info->size/BLOCK_SIZE + 1)" to ensure we only read as many blocks as the file has
+    for (int i = 0; leftToRead > 0 && iterBlock >= 0 && i < (info->size/BLOCK_SIZE + 1); i++) {
+        if (iterByte >= BLOCK_SIZE) {
+            LOGF("iterByte = %ld >= 512, need to go at least 1 block further", iterByte);
+            iterBlock = myFAT[iterBlock];
+            iterByte -= BLOCK_SIZE;
+        }
+        else {
+            //determine how many bytes shall be memcpied
+            //Either it is leftToRead(initially = size), meaning we don't read the block to it's end OR we read it fully
+            size_t copiedBytes = std::min(leftToRead, (size_t)(BLOCK_SIZE - iterByte));
+            LOGF("Will read from iterBlock = %ld, with (block-)offset iterByte = %ld ", iterBlock, iterByte);
+            LOGF("and write copiedBytes = %ld many bytes to buf+(bufByte = %ld)", copiedBytes, bufByte);
+            int ret = this->blockDevice->read(POS_DATA + iterBlock, blockBuf);
+            if (ret < 0) {
+                LOG("Couldn't read from Container");
+                RETURN (-4000);
+            }
+            void* retPtr = memcpy(buf + bufByte, blockBuf + iterByte, copiedBytes);
+            if (retPtr == nullptr) {
+                LOG("memcpy failed");
+                RETURN (-5000);
+            }
+            bufByte += copiedBytes; //iterate on buf
+            leftToRead -= copiedBytes; //iterate on size
+            iterByte = 0; //read one block at least, so blockoffset is 0 for the coming segments
+            iterBlock = myFAT[iterBlock]; //iterate block
+            LOGF("lefToRead = %ld", leftToRead);
+
+            /*
+            char debugBuf[BLOCK_SIZE + 1];
+            memcpy(debugBuf, blockBuf, BLOCK_SIZE);
+            debugBuf[BLOCK_SIZE] = '\0';
+            LOGF("BlockBuf = %s", debugBuf);
+             */
+        }
+    }
+
+    /*
+    char* debugBuf2 = (char*)malloc(size + 1);
+    if (debugBuf2 != nullptr) {
+        memcpy(debugBuf2, buf, size);
+        debugBuf2[size] = '\0';
+        LOGF("BlockBuf2 = %s", debugBuf2);
+    }
+    free(debugBuf2);
+     */
+
+    this->blockDevice->close();
+    RETURN(bufByte);
 }
 
 /// @brief Write to a file.
