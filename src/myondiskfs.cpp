@@ -708,9 +708,25 @@ int MyOnDiskFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo) {
 int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize) {
     LOGM();
 
-    // TODO: [PART 2] Implement this!
+    //get file-index and call other fuseTruncate with it
+    fuse_file_info *info = (fuse_file_info*)malloc(sizeof(fuse_file_info));
+    info->fh = -1;
 
-    RETURN(0);
+    for(int i = 0; i < NUM_DIR_ENTRIES; i++) {
+        if (strcmp(path, myRoot[i].cPath) == 0) {
+            //found file
+            info->fh = i;
+        }
+    }
+    if (info->fh < 0) {
+        //file doesn't exist
+        RETURN(-EEXIST);
+    }
+    int ret = fuseTruncate(path, newSize, info);
+
+    free(info);
+
+    RETURN(ret);
 }
 
 /// @brief Truncate a file.
@@ -727,6 +743,84 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
     LOGM();
 
     // TODO: [PART 2] Implement this!
+
+    if (0 > iIsPathValid(path, fileInfo->fh)){
+        RETURN(iIsPathValid(path, fileInfo->fh));
+    }
+
+    //open container
+    int ret = this->blockDevice->open(containerFilePath);
+    LOG("opened container");
+    if (ret < 0) {
+        RETURN(-3000);
+    }
+
+    MyFsDiskInfo* info = &myRoot[fileInfo->fh];
+
+    size_t newBlocks = ceil(newSize/BLOCK_SIZE);
+    size_t oldBlocks = ceil(info->size/BLOCK_SIZE);
+
+    if(oldBlocks <= 0 && newBlocks >= 1) {
+        LOG("file was empty");
+        int32_t num = iFindEmptySpot();
+        if (num < 0) {
+            LOG("iFindEmptySpot() failed");
+            RETURN(num);
+        }
+        info->data = num;
+        syncRoot();
+        newBlocks--;
+        oldBlocks++;
+    }
+
+    if(newBlocks > oldBlocks) {
+        LOG("file is getting bigger, we need more blocks");
+        int32_t num = info->data;
+        int32_t tmpNum = -1;
+        //iterate through myFat to reach last block of oldSize
+        //careful 0th iteration is already done with num = info->data
+        for(int i = 1; i < newBlocks; i++) {
+            if (myFAT[num] < 0) {
+                //need to reserve next block
+                tmpNum = iFindEmptySpot();
+                if (tmpNum < 0) {
+                    LOG("iFindEmptySpot() failed");
+                    RETURN(tmpNum);
+                }
+                myDmap[tmpNum] = 0;
+                myFAT[num] = tmpNum;
+                syncDmapFat(num);
+                LOGF("synced block = %ld", num);
+                num = myFAT[num];
+            }
+            else {
+                //we can still iterate at least one more block
+                num = myFAT[num];
+            }
+        }
+        //still need to sync dmap-entry for the last block in file
+        syncDmapFat(tmpNum);
+        LOGF("synced block = %ld", tmpNum);
+
+    }
+    else if (newBlocks < oldBlocks) {
+        //file is getting smaller, we can free blocks
+        int32_t num = info->data;
+        //iterate through myFat to reach last block of newSize
+        //careful 0th iteration is already done with num = info->data
+        for(int i = 1; i < newBlocks; i++) {
+            num = myFAT[num];
+        }
+        ret = unlinkBlocks(num);
+        if (ret < 0) {
+            LOG("failed inside unlinkBlocks");
+            RETURN (ret);
+        }
+    }
+    else {
+        //don't need new Blocks -> do nothing
+    }
+
 
     RETURN(0);
 }
@@ -986,6 +1080,26 @@ void MyOnDiskFS::fuseDestroy() {
 
 // TODO: [PART 2] You may add your own additional methods here!
 
+/// unlinks all blocks of the file starting with Block "num"
+/// \param num first Block to be unlinked
+/// \return 0 on success, -ERRORNUMBER on failure
+int MyOnDiskFS::unlinkBlocks(int32_t num) {
+    if (num >= NUM_DATA_BLOCK_COUNT && num < 0) {
+        LOGF("num = %ld not valid", num);
+        RETURN(-1111);
+    }
+    int32_t iterNum = num;
+    for(int i = 0; iterNum >= 0 && iterNum < NUM_DATA_BLOCK_COUNT && i < NUM_DATA_BLOCK_COUNT; i++) {
+        int32_t tmpNum = iterNum;
+        myDmap[tmpNum] = 1;
+        //iterate through FAT and delete Fat-entry for the link we just used
+        iterNum = myFAT[tmpNum];
+        myFAT[tmpNum] = -1;
+        syncDmapFat(tmpNum);
+        LOGF("synced block = %ld", tmpNum);
+    }
+    RETURN (0);
+}
 
 /// BLOCKDEVICE NEEDS TO BE OPEN
 /// \param num blck num with first datablock as 0
