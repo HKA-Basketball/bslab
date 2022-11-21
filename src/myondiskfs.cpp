@@ -117,6 +117,33 @@ int MyOnDiskFS::fuseUnlink(const char *path) {
     LOGM();
 
     // TODO: [PART 2] Implement this!
+    u_int32_t index = -1;
+
+    //find file index
+    for(int i = 0; i < NUM_DIR_ENTRIES; i++) {
+        if (strcmp(path, myRoot[i].cPath) == 0) {
+            //found file
+            index = i;
+        }
+    }
+    if (index < 0) {
+        //file doesn't exist
+        RETURN(-EEXIST);
+    }
+
+    //TODO: do we need to close/release file first?
+    //TODO: general todo, but superblock has dynamic values, however it was neglected thus far superblock.freeblocks f.e.
+
+    //unlink blocks
+    unlinkBlocks(myRoot[index].data);
+    //reset myRoot
+    memset(&myRoot[index], 0, sizeof(MyFsDiskInfo));
+    myRoot[index].data = POS_NULLPTR;
+    myRoot[index].cPath[0] = '\0';
+    syncRoot();
+    //adjust helpers
+    myFsEmpty[index] = true;
+    iCounterFiles--;
 
     RETURN(0);
 }
@@ -525,7 +552,7 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
         }
 
         //empty file?
-        if (info->data = POS_NULLPTR) {
+        if (info->data == POS_NULLPTR) {
             LOG("file was empty before");
             tmpBlock = findFreeBlock();
             if (tmpBlock >= ERROR_BLOCKNUMBER) {
