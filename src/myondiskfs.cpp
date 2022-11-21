@@ -493,6 +493,9 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
                 LOGF("iterBlock = %ld, myFAT[iterBlock] = %ld (Should be 0xFF (4.294.967.295) since it should be a free area)", iterBlock, myFAT[iterBlock]);
             }
         }
+        //still need to sync last block of file, because of dmap
+        //if the file only has 1 block, it is needlessly synced twice
+        syncDmapFat(iterBlock);
     }
     else {
         LOG("we have enough space");
@@ -818,6 +821,7 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
                 }
                 memset(&myRoot, 0, sizeof(myRoot));
                 for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
+                    myRoot[i].data = POS_NULLPTR;
                     myRoot[i].cPath[0] = '\0';
                 }
                 iCounterFiles = iCounterOpen = 0;
@@ -898,6 +902,7 @@ void MyOnDiskFS::fuseDestroy() {
     LOGM();
 
     // TODO: [PART 2] Implement this!
+    dumpStructures();
 
 }
 
@@ -1007,18 +1012,18 @@ void MyOnDiskFS::dumpStructures() {
          mySuperBlock.dataPos, mySuperBlock.dmapPos, mySuperBlock.rootPos, mySuperBlock.fatPos);
     LOG("Dumping DMAP");
     for (int i = 0; i < NUM_DATA_BLOCK_COUNT; i++) {
-        if (i % (1024*1024*16) == 0) {
+        if (myDmap[i] != 1) {
             LOGF("myDmap[%ld] = %ld", i, myDmap[i]);
         }
     }
     LOG("Dumping FAT");
     for (int i = 0; i < NUM_DATA_BLOCK_COUNT; i++) {
-        if (i % (1024*1024*16) == 0) {
+        if (myFAT[i] != -1) {
             LOGF("myFAT[%ld] = %d", i, myFAT[i]);
         }
     }
     LOG("Dumping Root");
-    for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
+    for (int i = 0; i < NUM_DIR_ENTRIES && myRoot[i].data != POS_NULLPTR; i++) {
         LOGF("File %ld:"
              "    size_t size = %ld\n"
              "    int32_t data = %ld\n"
