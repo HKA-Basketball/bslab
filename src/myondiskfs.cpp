@@ -639,7 +639,7 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
         //LOG("need to read prefix, overwrite it and save it");
         this->blockDevice->read(POS_DATA + offsetBlock, blockBuf);
         tmpPtr = memcpy(blockBuf + offsetByte, iterBuf, std::min(size, (size_t)BLOCK_SIZE - offsetByte));
-        iterBuf += BLOCK_SIZE - offsetByte;
+        iterBuf += std::min(size, (size_t)BLOCK_SIZE - offsetByte);
         //LOGF("iterBuf = %X", iterBuf);
         if (tmpPtr == nullptr) {
             //LOG("memcpy of of first bytes of buf");
