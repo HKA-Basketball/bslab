@@ -170,12 +170,12 @@ int MyFS::fuseRemovexattr(const char *path, const char *name) {
 }
 
 int MyFS::fuseOpendir(const char *path, struct fuse_file_info *fileInfo) {
-    LOGM();
+    //LOGM();
     RETURN(0);
 }
 
 int MyFS::fuseReleasedir(const char *path, struct fuse_file_info *fileInfo) {
-    LOGM();
+    //LOGM();
     RETURN(0);
 }
 
