@@ -638,7 +638,7 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
     if (offsetByte > 0) {
         LOG("need to read prefix, overwrite it and save it");
         this->blockDevice->read(POS_DATA + offsetBlock, blockBuf);
-        tmpPtr = memcpy(blockBuf + offsetByte, iterBuf, BLOCK_SIZE - offsetByte);
+        tmpPtr = memcpy(blockBuf + offsetByte, iterBuf, std::min(size, (size_t)BLOCK_SIZE - offsetByte));
         iterBuf += BLOCK_SIZE - offsetByte;
         LOGF("iterBuf = %X", iterBuf);
         if (tmpPtr == nullptr) {
@@ -664,14 +664,14 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
     }
 
     LOG("write last block");
-    memset(blockBuf, 0, BLOCK_SIZE);
-    tmpPtr = memcpy(blockBuf, iterBuf, bufEND - iterBuf);
-    if (tmpPtr == nullptr) {
-        LOG("memcpy of iterBuf till end of buf failed");
-        RETURN(-4000);
-    }
     if (iterBlock >= 0) {
         LOG("actually writing last block (didn't reach end of file yet)");
+        memset(blockBuf, 0, BLOCK_SIZE);
+        tmpPtr = memcpy(blockBuf, iterBuf, std::max((long)0, bufEND - iterBuf));
+        if (tmpPtr == nullptr) {
+            LOG("memcpy of iterBuf till end of buf failed");
+            RETURN(-4000);
+        }
         LOGF("iterBlock = %ld, myFAT[iterBlock] = %ld", iterBlock, myFAT[iterBlock]);
         this->blockDevice->write(POS_DATA + iterBlock, blockBuf);
     }
@@ -694,7 +694,7 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
 
     dumpStructures();
 
-    RETURN(0);
+    RETURN(size);
 }
 
 /// @brief Close a file.
@@ -1309,15 +1309,15 @@ int MyOnDiskFS::syncRoot() {
 int MyOnDiskFS::iIsPathValid(const char *path, uint64_t fh) {
     LOGM();
     if (fh < 0 || fh >= NUM_DIR_ENTRIES) {
-        RETURN (-1);
+        RETURN (-155);
     }
     if (myFsEmpty[fh]) {
-        RETURN (-1);
+        RETURN (-156);
     }
     if (strcmp(path, myRoot[fh].cPath) == 0) {
         RETURN (fh);
     }
-    RETURN (-1);
+    RETURN (-157);
 }
 
 int MyOnDiskFS::iFindEmptySpot()
