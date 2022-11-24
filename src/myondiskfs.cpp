@@ -848,6 +848,8 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
         //don't need new Blocks -> do nothing
     }
 
+    info->size = newSize;
+    syncRoot();
 
     RETURN(0);
 }
