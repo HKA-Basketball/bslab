@@ -210,10 +210,10 @@ int MyOnDiskFS::fuseRename(const char *path, const char *newpath) {
 /// \param [out] statbuf Structure containing the meta data, for details type "man 2 stat" in a terminal.
 /// \return 0 on success, -ERRNO on failure.
 int MyOnDiskFS::fuseGetattr(const char *path, struct stat *statbuf) {
-    LOGM();
+    //LOGM();
 
 
-    LOGF( "\tAttributes of %s requested\n", path );
+    //LOGF( "\tAttributes of %s requested\n", path );
 
     // GNU's definitions of the attributes (http://www.gnu.org/software/libc/manual/html_node/Attribute-Meanings.html):
     // 		st_uid: 	The user ID of the file’s owner.
@@ -238,37 +238,37 @@ int MyOnDiskFS::fuseGetattr(const char *path, struct stat *statbuf) {
 
     if ( strcmp( path, "/" ) == 0 )
     {
-        LOG("path is rootdirectory \'/\'");
+        //LOG("path is rootdirectory \'/\'");
         statbuf->st_mode = S_IFDIR | 0755;
         statbuf->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
     }
     else if ( strlen(path) > 0 )
     {
-        LOG("path-length > 0");
+        //LOG("path-length > 0");
         for (size_t i = 0; i < NUM_DIR_ENTRIES; i++)
         {
             if (myFsEmpty[i]){
                 continue;
             }
-            LOGF("Comparing string1: %s, and string2: %s", path, myRoot[i].cPath);
+            //LOGF("Comparing string1: %s, and string2: %s", path, myRoot[i].cPath);
             if (strcmp(path, myRoot[i].cPath) == 0)
             {
                 statbuf->st_mode = myRoot[i].mode;
                 statbuf->st_nlink = 1;
                 statbuf->st_size = myRoot[i].size;
                 statbuf->st_mtime = myRoot[i].mtime; // The last "m"odification of the file/directory is right now
-                LOG("fuseGetAttr()");
-                LOG("filled statbuf with data");
-                LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", i, myRoot[i].cPath, myRoot[i].size, myRoot[i].atime);
+                //LOG("fuseGetAttr()");
+                //LOG("filled statbuf with data");
+                //LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", i, myRoot[i].cPath, myRoot[i].size, myRoot[i].atime);
                 RETURN(0);
             }
         }
-        LOG("havent found file in myFsFiles-array");
+        //LOG("havent found file in myFsFiles-array");
 
         ret= -ENOENT;
     }
     else {
-        LOG("path-length <= 0");
+        //LOG("path-length <= 0");
         ret= -ENOENT;
     }
 
@@ -572,7 +572,7 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
             if (i < haveBlocks) {
                 //Travel through blocks of the file to reach the file's end
                 tmpBlock = myFAT[iterBlock];
-                LOGF("iterBlock = %ld, myFAT[iterBlock] = %ld (inside existing blocks)", iterBlock, tmpBlock);
+                //LOGF("iterBlock = %ld, myFAT[iterBlock] = %ld (inside existing blocks)", iterBlock, tmpBlock);
                 if (tmpBlock == -1) {
                     LOG("myFAT ended prematurely. THIS SHOULD NOT OCCUR!");
                     RETURN(-2000);
@@ -582,20 +582,20 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
             else {
                 //reserve next block and iterate
                 tmpBlock = findFreeBlock();
-                LOGF("Reserved tmpBlock = %ld block", tmpBlock);
+                //LOGF("Reserved tmpBlock = %ld block", tmpBlock);
                 if (tmpBlock >= ERROR_BLOCKNUMBER) {
                     LOG("can't find free block. THIS SHOULD NOT OCCUR!");
                     RETURN(-ENOSPC);
                 }
 
-                LOGF("i = %ld, iterBlock = %ld, tmpBlock = %ld", i, iterBlock, tmpBlock);
+                //LOGF("i = %ld, iterBlock = %ld, tmpBlock = %ld", i, iterBlock, tmpBlock);
                 myFAT[iterBlock] = (int32_t)tmpBlock;
-                LOGF("iterBlock = %ld, myFAT[iterBlock] = %ld", iterBlock, myFAT[iterBlock]);
+                //LOGF("iterBlock = %ld, myFAT[iterBlock] = %ld", iterBlock, myFAT[iterBlock]);
                 // Sync DMAP & FAT
                 syncDmapFat(iterBlock);
                 // Set next Block
                 iterBlock = myFAT[iterBlock];
-                LOGF("iterBlock = %ld, myFAT[iterBlock] = %ld (Should be 0xFF (4.294.967.295) since it should be a free area)", iterBlock, myFAT[iterBlock]);
+                //LOGF("iterBlock = %ld, myFAT[iterBlock] = %ld (Should be 0xFF (4.294.967.295) since it should be a free area)", iterBlock, myFAT[iterBlock]);
             }
         }
         //still need to sync last block of file, because of dmap
@@ -603,44 +603,44 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
         syncDmapFat(iterBlock);
     }
     else {
-        LOG("we have enough space");
+        //LOG("we have enough space");
     }
 
-    LOG("Find start-position to write");
+    //LOG("Find start-position to write");
     int64_t startBlock = offset / BLOCK_SIZE;
     u_int32_t offsetBlock = 0;
     u_int32_t offsetByte = offset % BLOCK_SIZE;
-    LOGF("startBlock = %ld, offsetByte = %ld", startBlock, offsetByte);
+    //LOGF("startBlock = %ld, offsetByte = %ld", startBlock, offsetByte);
 
     iterBlock = info->data;
-    LOG("Travel through blocks of the file to reach the offset");
+    //LOG("Travel through blocks of the file to reach the offset");
     for (int i = 0; i < startBlock; i++) {
         //Travel through blocks of the file to reach the offset
         tmpBlock = myFAT[iterBlock];
-        LOGF("it %ld, iterBlock = %ld, myFAT[iterBlock] = %ld", i, iterBlock, tmpBlock);
+        //LOGF("it %ld, iterBlock = %ld, myFAT[iterBlock] = %ld", i, iterBlock, tmpBlock);
         if (tmpBlock == -1) {
             LOG("myFAT ended prematurely. THIS SHOULD NOT OCCUR!");
             RETURN(-2000);
         }
         iterBlock = tmpBlock;
         offsetBlock = iterBlock;
-        LOGF("iterBlock = %ld", iterBlock);
+        //LOGF("iterBlock = %ld", iterBlock);
     }
-    LOG("start to write");
-    LOGF("iterBlock = %ld", iterBlock);
+    //LOG("start to write");
+    //LOGF("iterBlock = %ld", iterBlock);
     char* iterBuf = (char*)buf;
     char* bufEND = (char*)(buf + size); //first invalid adress after buf
     char blockBuf[BLOCK_SIZE];
     void* tmpPtr = nullptr;
-    LOGF("iterBuf = %X", iterBuf);
+    //LOGF("iterBuf = %X", iterBuf);
 
     //offset is inside iterBlock
     if (offsetByte > 0) {
-        LOG("need to read prefix, overwrite it and save it");
+        //LOG("need to read prefix, overwrite it and save it");
         this->blockDevice->read(POS_DATA + offsetBlock, blockBuf);
         tmpPtr = memcpy(blockBuf + offsetByte, iterBuf, std::min(size, (size_t)BLOCK_SIZE - offsetByte));
         iterBuf += BLOCK_SIZE - offsetByte;
-        LOGF("iterBuf = %X", iterBuf);
+        //LOGF("iterBuf = %X", iterBuf);
         if (tmpPtr == nullptr) {
             LOG("memcpy of of first bytes of buf");
             RETURN(-4000);
@@ -650,7 +650,7 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
     }
 
     //write full blocks with no prefix and no suffix (writing from 0th byte in block to the 511th)
-    LOG("Writing full blocks");
+    //LOG("Writing full blocks");
     for (int i = 0; i < NUM_DATA_BLOCK_COUNT; i++) {
         if(iterBuf > bufEND - BLOCK_SIZE || iterBlock == -1) {
             LOG("wrote all full blocks");
@@ -658,14 +658,14 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
         }
         this->blockDevice->write(POS_DATA + iterBlock, iterBuf);
         iterBuf += BLOCK_SIZE;
-        LOGF("iterBuf = %X", iterBuf);
-        LOGF("iterBlock = %ld, myFAT[iterBlock] = %ld", iterBlock, myFAT[iterBlock]);
+        //LOGF("iterBuf = %X", iterBuf);
+        //LOGF("iterBlock = %ld, myFAT[iterBlock] = %ld", iterBlock, myFAT[iterBlock]);
         iterBlock = myFAT[iterBlock];
     }
 
-    LOG("write last block");
+    //LOG("write last block");
     if (iterBlock >= 0) {
-        LOG("actually writing last block (didn't reach end of file yet)");
+        //LOG("actually writing last block (didn't reach end of file yet)");
         memset(blockBuf, 0, BLOCK_SIZE);
         tmpPtr = memcpy(blockBuf, iterBuf, std::max((long)0, bufEND - iterBuf));
         if (tmpPtr == nullptr) {
@@ -676,7 +676,7 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
         this->blockDevice->write(POS_DATA + iterBlock, blockBuf);
     }
 
-    LOG("sync superblock");
+    //LOG("sync superblock");
     memset(blockBuf, 0, BLOCK_SIZE);
     memcpy(blockBuf, &mySuperBlock, sizeof(SuperBlock));
     ret = this->blockDevice->write(POS_SPBLOCK, blockBuf);
@@ -684,7 +684,7 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
         LOGF("ERROR: blockDevice couldn't write superblock %d", ret);
         RETURN(-4000);
     }
-    LOG("wrote superblock");
+    //LOG("wrote superblock");
 
 
     info->size = std::max(size + offset, info->size);
@@ -692,7 +692,7 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
 
     this->blockDevice->close();
 
-    dumpStructures();
+    //dumpStructures();
 
     RETURN(size);
 }
@@ -865,9 +865,9 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
 /// \param [in] fileInfo Can be ignored.
 /// \return 0 on success, -ERRNO on failure.
 int MyOnDiskFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fileInfo) {
-    LOGM();
+    //LOGM();
 
-    LOGF( "--> Getting The List of Files of %s\n", path );
+    //LOGF( "--> Getting The List of Files of %s\n", path );
 
     filler( buf, ".", NULL, 0 ); // Current Directory
     filler( buf, "..", NULL, 0 ); // Parent Directory
@@ -876,7 +876,7 @@ int MyOnDiskFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t filler,
     {
         for (size_t i = 0; i < NUM_DIR_ENTRIES; i++){
             if (!myFsEmpty[i]) {
-                LOGF("adding to filler: %s", myRoot[i].cPath+1);
+                //LOGF("adding to filler: %s", myRoot[i].cPath+1);
                 filler( buf, myRoot[i].cPath+1, NULL, 0);
             }
         }
@@ -991,7 +991,7 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
 
                 initializeHelpers();
 
-                dumpStructures();
+                //dumpStructures();
             }
 
 
@@ -1103,7 +1103,7 @@ void MyOnDiskFS::fuseDestroy() {
     LOGM();
 
     // TODO: [PART 2] Implement this!
-    dumpStructures();
+    //dumpStructures();
 
 }
 
@@ -1144,6 +1144,12 @@ int MyOnDiskFS::syncDmapFat(u_int32_t num) {
     int32_t fatBlock = num * sizeof(int32_t) / BLOCK_SIZE;
     u_int32_t fatOffset = num * sizeof(int32_t) % BLOCK_SIZE;
     LOGF("fatPtr = %X, fatBlock = %ld, fatOffset = %ld", fatPtr, fatBlock, fatOffset);
+
+    int ret = this->blockDevice->open(containerFilePath);
+    if(ret < 0) {
+        LOG("couldn't open container");
+        RETURN(-10000);
+    }
 
     char blockBuf[512];
     int blkDev = this->blockDevice->read(POS_DMAP + dmapBlock, blockBuf);
