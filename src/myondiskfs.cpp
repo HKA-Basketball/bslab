@@ -613,6 +613,12 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
     //LOGF("startBlock = %ld, offsetByte = %ld", startBlock, offsetByte);
 
     iterBlock = info->data;
+
+    // Set offsetBlock if startBlock == 0
+    if (startBlock == 0) {
+        offsetBlock = iterBlock;
+    }
+
     //LOG("Travel through blocks of the file to reach the offset");
     for (int i = 0; i < startBlock; i++) {
         //Travel through blocks of the file to reach the offset
