@@ -672,7 +672,7 @@ int MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t 
     //LOG("write last block");
     if (iterBlock >= 0 && bufEND - iterBuf > 0) {
         //LOG("actually writing last block (didn't reach end of file yet)");
-        this->blockDevice->read(POS_DATA + offsetBlock, blockBuf);
+        memset(blockBuf, 0, BLOCK_SIZE);
         tmpPtr = memcpy(blockBuf, iterBuf, std::max((long)0, bufEND - iterBuf));
         if (tmpPtr == nullptr) {
             //LOG("memcpy of iterBuf till end of buf failed");

@@ -454,7 +454,7 @@ TEST_CASE("T-1.09", "[Part_1]") {
     delete [] r;
     delete [] w;
 }
-/*
+
 TEST_CASE("T-1.10", "[Part_1]") {
     printf("Testcase 1.10: Write a very large file\n");
     int fd;
@@ -493,4 +493,3 @@ TEST_CASE("T-1.10", "[Part_1]") {
     // remove file
     REQUIRE(unlink(FILENAME) >= 0);
 }
-*/
