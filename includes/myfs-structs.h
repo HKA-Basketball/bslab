@@ -27,43 +27,39 @@
 #define ERROR_BLOCKNUMBER 4294967296 // 2^32
 
 // TODO: Add structures of your file system here
-struct MyFsFileInfo
-{
+struct MyFsFileInfo {
     char cName[NAME_LENGTH];    // Name
     size_t size;                // Data Size
-    unsigned char* data;        // Data
+    unsigned char *data;        // Data
     __uid_t uid;                // User ID
     __gid_t gid;                // Gruppen ID 
     __mode_t mode;              // File mode
-    struct timespec atime;	    // Time of last access.
-    struct timespec mtime;	    // Time of last modification.
-    struct timespec ctime;	    // Time of last status change.
+    struct timespec atime;        // Time of last access.
+    struct timespec mtime;        // Time of last modification.
+    struct timespec ctime;        // Time of last status change.
 
     //const char* cPath;                // Path to the file
-    char cPath[NAME_LENGTH+1];    // Path to the file
+    char cPath[NAME_LENGTH + 1];    // Path to the file
 };
 
 // Aufgabe 2.
 
-struct MyFsDiskInfo
-{
+struct MyFsDiskInfo {
     size_t size;                // Data Size    64bit
     int32_t data;               // Block Pos    32bit
     __uid_t uid;                // User ID      32bit
     __gid_t gid;                // Gruppen ID   32bit
     __mode_t mode;              // File mode    32bit
-    __time_t atime;	            // Time of last access.         64bit
-    __time_t mtime;	            // Time of last modification.   64bit
-    __time_t ctime;	            // Time of last status change.  64bit
-    char cPath[NAME_LENGTH+1];   // Path to the file    256bit
+    __time_t atime;                // Time of last access.         64bit
+    __time_t mtime;                // Time of last modification.   64bit
+    __time_t ctime;                // Time of last status change.  64bit
+    char cPath[NAME_LENGTH + 1];   // Path to the file    256bit
 };
 
-struct SuperBlock
-{
+struct SuperBlock {
     //Informationen zum File-System (z.B. Größe, Positionen der Einträge unten...)
     size_t infoSize;
     size_t dataSize;
-    size_t freeBlocks; // number of free blocks
     int32_t blockPos;
     int32_t dmapPos;
     int32_t fatPos;
