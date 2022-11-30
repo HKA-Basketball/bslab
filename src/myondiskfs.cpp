@@ -167,22 +167,21 @@ int MyOnDiskFS::fuseRename(const char *path, const char *newpath) {
     }
 
     size_t index = -1;
-    bool bNewNameAlreadyInUse = false;
 
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++) {
         if (myFsEmpty[i]) {
             continue;
         }
+
+        // Search for the index of the file
         if (strcmp(path, myRoot[i].cPath) == 0) {
             index = i;
         }
-        if (strcmp(path, newpath) == 0) {
-            bNewNameAlreadyInUse = true;
-        }
-    }
 
-    if (bNewNameAlreadyInUse) {
-        RETURN(-EEXIST);
+        // File with the new name already exists
+        if (strcmp(myRoot[i].cPath, newpath) == 0) {
+            RETURN(-EEXIST);
+        }
     }
 
     // file found?
