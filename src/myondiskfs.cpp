@@ -132,7 +132,6 @@ int MyOnDiskFS::fuseUnlink(const char *path) {
     }
 
     //TODO: do we need to close/release file first?
-    //TODO: general todo, but superblock has dynamic values, however it was neglected thus far superblock.freeblocks f.e.
 
     //unlink blocks
     unlinkBlocks(myRoot[index].data);
@@ -1013,7 +1012,6 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
                 //initialise superblock
                 mySuperBlock.infoSize = POS_DATA;
                 mySuperBlock.dataSize = NUM_DATA_BLOCK_COUNT * 512;
-                mySuperBlock.freeBlocks = NUM_DATA_BLOCK_COUNT;
                 mySuperBlock.blockPos = POS_SPBLOCK;
                 mySuperBlock.dataPos = POS_DATA;
                 mySuperBlock.dmapPos = POS_DMAP;
@@ -1194,16 +1192,13 @@ int MyOnDiskFS::syncDmapFat(u_int32_t num) {
 
 size_t MyOnDiskFS::findFreeBlock() {
     //LOGM();
-    if (mySuperBlock.freeBlocks == 0) {
+    if (containerFull(1, 0)) {
         RETURN(ERROR_BLOCKNUMBER);
     }
 
-    for (size_t i = 0; i < NUM_DATA_BLOCK_COUNT; i++)
-    {
-        if (myDmap[i] == 1)
-        {
+    for (size_t i = 0; i < NUM_DATA_BLOCK_COUNT; i++) {
+        if (myDmap[i] == 1) {
             memset(&myDmap[i], 0, sizeof(char));
-            mySuperBlock.freeBlocks--;
             RETURN (i);
         }
     }
@@ -1235,13 +1230,12 @@ void MyOnDiskFS::dumpStructures() {
     //LOGF("Dumping Superblock:\n"
          "                mySuperBlock.infoSize = %ld;\n"
          "                mySuperBlock.dataSize = %ld;\n"
-         "                mySuperBlock.freeBlocks = %ld;\n"
          "                mySuperBlock.blockPos = %ld;\n"
          "                mySuperBlock.dataPos = %ld;\n"
          "                mySuperBlock.dmapPos = %ld;\n"
          "                mySuperBlock.rootPos = %ld;\n"
          "                mySuperBlock.fatPos = %ld;",
-         mySuperBlock.infoSize, mySuperBlock.dataSize, mySuperBlock.freeBlocks, mySuperBlock.blockPos,
+         mySuperBlock.infoSize, mySuperBlock.dataSize, mySuperBlock.blockPos,
          mySuperBlock.dataPos, mySuperBlock.dmapPos, mySuperBlock.rootPos, mySuperBlock.fatPos);
     //LOG("Dumping DMAP");
     for (int i = 0; i < NUM_DATA_BLOCK_COUNT; i++) {
@@ -1280,9 +1274,16 @@ void MyOnDiskFS::dumpStructures() {
 
 int MyOnDiskFS::containerFull(size_t size, off_t offset) {
     //LOGM();
-    if (ceil((size+offset)/BLOCK_SIZE) > mySuperBlock.freeBlocks) {
+
+    size_t filesize = 0;
+    for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
+        filesize += ceil((myRoot[i].size) / BLOCK_SIZE);
+    }
+
+    if (filesize + ceil((size + offset) / BLOCK_SIZE) > NUM_DATA_BLOCK_COUNT) {
         RETURN(1);
     }
+
     RETURN(0);
 }
 
