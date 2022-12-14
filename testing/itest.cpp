@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 #include <string.h>
 
+#include <dirent.h>
+
 #include "../catch/catch.hpp"
 
 #include "tools.hpp"
@@ -492,4 +494,66 @@ TEST_CASE("T-1.10", "[Part_1]") {
 
     // remove file
     REQUIRE(unlink(FILENAME) >= 0);
+}
+
+
+TEST_CASE("T-2.1", "[Part_2]") {
+    printf("Testcase 2.1: Test that the readdir function returns the correct list of files\n");
+    int fd;
+
+    const char* file_1 = "file_1";
+    const char* file_2 = "file_2";
+
+    // remove files (just to be sure)
+    unlink(file_1);
+    unlink(file_2);
+
+    // Create file_1
+    fd = open(file_1, O_EXCL | O_RDWR | O_CREAT, 0666);
+    REQUIRE(fd >= 0);
+
+    // Close file_1
+    REQUIRE(close(fd) >= 0);
+
+    // Create file_2
+    fd = open(file_2, O_EXCL | O_RDWR | O_CREAT, 0666);
+    REQUIRE(fd >= 0);
+
+    // Close file_2
+    REQUIRE(close(fd) >= 0);
+
+    DIR *dir;
+    struct dirent *ent;
+
+    REQUIRE((dir = opendir("./")) != NULL);
+
+    bool current_path;
+    bool previous_path;
+    bool file_1_path;
+    bool file_2_path;
+
+    while((ent = readdir(dir)) != NULL) {
+        if(strcmp(ent->d_name, "."))
+            current_path = true;
+
+        if(strcmp(ent->d_name, ".."))
+            previous_path = true;
+
+        if(strcmp(ent->d_name, file_1))
+            file_1_path = true;
+
+        if(strcmp(ent->d_name, file_2))
+            file_2_path = true;
+    }
+
+    REQUIRE(current_path);
+    REQUIRE(previous_path);
+    REQUIRE(file_1_path);
+    REQUIRE(file_2_path);
+
+    REQUIRE(closedir(dir) == 0);
+
+    // remove files
+    unlink(file_1);
+    unlink(file_2);
 }
