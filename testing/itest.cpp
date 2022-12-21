@@ -498,13 +498,48 @@ TEST_CASE("T-1.10", "[Part_1]") {
 
 
 TEST_CASE("T-2.1", "[Part_2]") {
-    printf("Testcase 2.1: Test that the readdir function returns the correct list of files\n");
+    printf("Testcase 2.1: Readdir function returns '.' and '..'\n");
+
+    DIR *dir;
+    struct dirent *ent;
+
+    bool current_path = false;
+    bool parent_path = false;
+
+    // Open directory
+    REQUIRE((dir = opendir("./")) != NULL);
+
+    // Readdir
+    while((ent = readdir(dir)) != NULL) {
+        if(strcmp(ent->d_name, ".") == 0)
+            current_path = true;
+
+        if(strcmp(ent->d_name, "..") == 0)
+            parent_path = true;
+    }
+
+    // Check if Readdir was correct
+    REQUIRE(current_path);
+    REQUIRE(parent_path);
+
+    // Close directory
+    REQUIRE(closedir(dir) == 0);
+}
+
+TEST_CASE("T-2.2", "[Part_2]") {
+    printf("Testcase 2.2: Readdir function returns the correct list of files\n");
+
     int fd;
+    DIR *dir;
+    struct dirent *ent;
+
+    bool file_1_path = false;
+    bool file_2_path = false;
 
     const char* file_1 = "file_1";
     const char* file_2 = "file_2";
 
-    // remove files (just to be sure)
+    // Remove files (just to be sure)
     unlink(file_1);
     unlink(file_2);
 
@@ -522,38 +557,64 @@ TEST_CASE("T-2.1", "[Part_2]") {
     // Close file_2
     REQUIRE(close(fd) >= 0);
 
-    DIR *dir;
-    struct dirent *ent;
-
+    // Open directory
     REQUIRE((dir = opendir("./")) != NULL);
 
-    bool current_path;
-    bool previous_path;
-    bool file_1_path;
-    bool file_2_path;
-
+    // Readdir
     while((ent = readdir(dir)) != NULL) {
-        if(strcmp(ent->d_name, "."))
-            current_path = true;
-
-        if(strcmp(ent->d_name, ".."))
-            previous_path = true;
-
-        if(strcmp(ent->d_name, file_1))
+        if(strcmp(ent->d_name, file_1) == 0)
             file_1_path = true;
 
-        if(strcmp(ent->d_name, file_2))
+        if(strcmp(ent->d_name, file_2) == 0)
             file_2_path = true;
     }
 
-    REQUIRE(current_path);
-    REQUIRE(previous_path);
+    // Check if Readdir was correct
     REQUIRE(file_1_path);
     REQUIRE(file_2_path);
 
+    // Close directory
     REQUIRE(closedir(dir) == 0);
 
-    // remove files
+    // Remove files
     unlink(file_1);
     unlink(file_2);
+}
+
+TEST_CASE("T-2.3", "[Part_2]") {
+    printf("Testcase 2.3: Readdir function does not return a deleted file\n");
+
+    int fd;
+    DIR *dir;
+    struct dirent *ent;
+
+    bool filepath = false;
+
+    // Remove file (just to be sure)
+    unlink(FILENAME);
+
+    // Create file
+    fd = open(FILENAME, O_EXCL | O_RDWR | O_CREAT, 0666);
+    REQUIRE(fd >= 0);
+
+    // Close file
+    REQUIRE(close(fd) >= 0);
+
+    // Remove file again
+    unlink(FILENAME);
+
+    // Open directory
+    REQUIRE((dir = opendir("./")) != NULL);
+
+    // Readdir
+    while((ent = readdir(dir)) != NULL) {
+        if(strcmp(ent->d_name, FILENAME) == 0)
+            filepath = true;
+    }
+
+    // Check if Readdir was correct
+    REQUIRE(!filepath);
+
+    // Close directory
+    REQUIRE(closedir(dir) == 0);
 }
