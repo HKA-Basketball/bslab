@@ -19,6 +19,9 @@
 #define SMALL_SIZE 1024
 #define LARGE_SIZE 20*1024*1024
 
+#define FBLOCKS 512*4
+#define FOBLOCKS 512+(512/2)
+
 TEST_CASE("T-1.01", "[Part_1]") {
     printf("Testcase 1.1: Create & remove a single file\n");
 
@@ -617,4 +620,100 @@ TEST_CASE("T-2.3", "[Part_2]") {
 
     // Close directory
     REQUIRE(closedir(dir) == 0);
+}
+
+TEST_CASE("T-2.4", "[Part_2]") {
+    printf("Testcase 2.4: Open more than 64 files\n");
+
+    int fileSize= SMALL_SIZE;
+    int writeSize= 16;
+    const char *filename = "file";
+    int noFiles= 64;
+
+    int ret;
+    size_t b;
+
+    int fd[noFiles];
+
+    // open all files
+    for(int f= 0; f < noFiles; f++) {
+        char nFilename[strlen(filename)+10];
+        sprintf(nFilename, "%s_%d", filename, f);
+        unlink(nFilename);
+        fd[f]= open(nFilename, O_EXCL | O_RDWR | O_CREAT, 0666);
+        REQUIRE(fd[f] >= 0);
+    }
+
+
+    REQUIRE(open("File65", O_EXCL | O_RDWR | O_CREAT, 0666) < 0);
+
+
+    // close all files
+    for(int f= 0; f < noFiles; f++) {
+        ret= close(fd[f]);
+        REQUIRE(ret >= 0);
+    }
+
+}
+
+TEST_CASE("T-2.5", "[Part_5]") {
+    printf("Testcase 2.5: Write in middel of file\n");
+    int fd;
+
+    // remove file (just to be sure)
+    unlink(FILENAME);
+    char* buf = new char[FBLOCKS];;
+    // set up read & write buffer
+    char* r= new char[FBLOCKS];
+    memset(r, 0, FBLOCKS);
+    gen_random(r, FBLOCKS);
+    char* w= new char[FOBLOCKS];
+    memset(w, 0, FOBLOCKS);
+    gen_random(w, FOBLOCKS);
+
+    char* g = new char[FBLOCKS];
+    memcpy(g, r, FBLOCKS);
+    memcpy(g, w, FOBLOCKS);
+
+    // Create file
+    fd = open(FILENAME, O_EXCL | O_RDWR | O_CREAT, 0666);
+    REQUIRE(fd >= 0);
+
+    // Write to the file
+    REQUIRE(write(fd, r, FBLOCKS) == FBLOCKS);
+
+    // Close file
+    REQUIRE(close(fd) >= 0);
+
+    // Open file again
+    fd = open(FILENAME, O_EXCL | O_RDWR, 0666);
+    REQUIRE(fd >= 0);
+
+    // Read from the file
+    REQUIRE(read(fd, buf, FBLOCKS) == FBLOCKS);
+    REQUIRE(memcmp(buf, r, FBLOCKS) == 0);
+
+    // Close file
+    REQUIRE(close(fd) >= 0);
+
+    fd = open(FILENAME, O_EXCL | O_RDWR, 0666);
+    REQUIRE(fd >= 0);
+
+    REQUIRE(write(fd, w, FOBLOCKS) == FOBLOCKS);
+
+    // Close file
+    REQUIRE(close(fd) >= 0);
+
+    // Open file again
+    fd = open(FILENAME, O_EXCL | O_RDWR, 0666);
+    REQUIRE(fd >= 0);
+
+
+
+    REQUIRE(read(fd, buf, FBLOCKS) == FBLOCKS);
+    REQUIRE(memcmp(buf, g, FBLOCKS) == 0);
+
+    REQUIRE(close(fd) >= 0);
+    // remove file
+    REQUIRE(unlink(FILENAME) >= 0);
 }
