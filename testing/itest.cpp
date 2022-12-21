@@ -656,6 +656,9 @@ TEST_CASE("T-2.4", "[Part_2]") {
     for(int f= 0; f < noFiles; f++) {
         ret= close(fd[f]);
         REQUIRE(ret >= 0);
+        char nFilename[strlen(filename)+10];
+        sprintf(nFilename, "%s_%d", filename, f);
+        unlink(nFilename);
     }
 
 }
