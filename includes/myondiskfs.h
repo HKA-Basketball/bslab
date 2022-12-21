@@ -92,8 +92,6 @@ public:
     int iIsPathValid(const char *path, uint64_t fh);
 
     int iFindEmptySpot();
-
-    int iIsNameValid(const char *path);
 };
 
 #endif //MYFS_MYONDISKFS_H

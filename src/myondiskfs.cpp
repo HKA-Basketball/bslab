@@ -56,6 +56,11 @@ int MyOnDiskFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
         RETURN(-ENOSPC);
     }
 
+    //check length of given filename
+    if (strlen(path) - 1 > NAME_LENGTH) {
+        RETURN(-EINVAL);
+    }
+
     //file with same name exists?
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++) {
         if (myFsEmpty[i]) {
@@ -77,11 +82,6 @@ int MyOnDiskFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     //check length of given filename
     if (strlen(path) - 1 > NAME_LENGTH) {
         RETURN(-EINVAL);
-    }
-
-    //check whether path is valid
-    if (iIsNameValid(path) < 0) {
-        RETURN (iIsNameValid(path));
     }
 
     //overwrite all fileinfo values
@@ -127,6 +127,10 @@ int MyOnDiskFS::fuseUnlink(const char *path) {
         RETURN(-EEXIST);
     }
 
+    if (myFsOpenFiles[index]) {
+        RETURN(-EBUSY);
+    }
+
     //unlink blocks
     unlinkBlocks(myRoot[index].data);
     //reset myRoot
@@ -137,11 +141,6 @@ int MyOnDiskFS::fuseUnlink(const char *path) {
     //adjust helpers
     myFsEmpty[index] = true;
     iCounterFiles--;
-    if (myFsOpenFiles[index]) {
-        LOGF("file %ld was open while being deleted", index);
-        myFsOpenFiles[index] = false;
-        iCounterOpen--;
-    }
 
     RETURN(0);
 }
@@ -162,11 +161,6 @@ int MyOnDiskFS::fuseRename(const char *path, const char *newpath) {
     //check length of new filename
     if (strlen(newpath) - 1 > NAME_LENGTH) {
         RETURN(-EINVAL);
-    }
-
-    //check whether path is valid
-    if (iIsNameValid(path) < 0) {
-        RETURN (iIsNameValid(path));
     }
 
     size_t index = -1;
@@ -404,6 +398,10 @@ int MyOnDiskFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
 /// -ERRNO on failure.
 int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
     //LOGM();
+    if (size < 0 || offset < 0) {
+        RETURN(-EINVAL);
+    }
+
 
     if (0 > iIsPathValid(path, fileInfo->fh)) {
         RETURN(iIsPathValid(path, fileInfo->fh));
@@ -509,6 +507,10 @@ int
 MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
     //LOGM();
     //LOGF("parameters: path = %s, buf = %X, size = %ld, offset = %ld, fileinfo->fh = %ld", path, buf, size, offset, fileInfo->fh);
+
+    if (size < 0 || offset < 0) {
+        RETURN(-EINVAL);
+    }
 
     if (0 > iIsPathValid(path, fileInfo->fh)) {
         RETURN(iIsPathValid(path, fileInfo->fh));
@@ -712,6 +714,10 @@ int MyOnDiskFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo) {
         RETURN(valid);
     }
 
+    if (!myFsOpenFiles[valid]) {
+        RETURN(-EBADF);
+    }
+
     //LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", fileInfo->fh, myRoot[fileInfo->fh].cPath, myRoot[fileInfo->fh].size, myRoot[fileInfo->fh].atime);
 
     myFsOpenFiles[valid] = false;
@@ -732,6 +738,10 @@ int MyOnDiskFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo) {
 /// \return 0 on success, -ERRNO on failure.
 int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize) {
     //LOGM();
+
+    if (newSize < 0) {
+        RETURN(-EINVAL);
+    }
 
     //get file-index and call other fuseTruncate with it
     fuse_file_info *info = (fuse_file_info *) malloc(sizeof(fuse_file_info));
@@ -767,17 +777,13 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize) {
 int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_info *fileInfo) {
     //LOGM();
 
+    if (newSize < 0) {
+        RETURN(-EINVAL);
+    }
 
     if (0 > iIsPathValid(path, fileInfo->fh)) {
         RETURN(iIsPathValid(path, fileInfo->fh));
     }
-
-    //file opened
-    if (!myFsOpenFiles[fileInfo->fh]) {
-        LOG("File not open");
-        RETURN(-EPERM);
-    }
-
     //open container
     int ret = this->blockDevice->open(containerFilePath);
     //LOG("opened container");
@@ -1102,14 +1108,6 @@ void MyOnDiskFS::fuseDestroy() {
 
     //dumpStructures();
 
-}
-
-int MyOnDiskFS::iIsNameValid(const char *path) {
-    std::regex str_expr ("/[a-zA-Z0-9!?|]+");
-    if (regex_match(path, str_expr)) {
-        RETURN (0);
-    }
-    RETURN (-1);
 }
 
 
