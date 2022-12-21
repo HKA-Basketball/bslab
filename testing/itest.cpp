@@ -496,6 +496,10 @@ TEST_CASE("T-1.10", "[Part_1]") {
     REQUIRE(unlink(FILENAME) >= 0);
 }
 
+TEST_CASE("T-20.10", "Lennart") {
+
+}
+
 
 TEST_CASE("T-2.1", "[Part_2]") {
     printf("Testcase 2.1: Readdir function returns '.' and '..'\n");
