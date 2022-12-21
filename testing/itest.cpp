@@ -724,3 +724,93 @@ TEST_CASE("T-2.5", "[Part_5]") {
     // remove file
     REQUIRE(unlink(FILENAME) >= 0);
 }
+
+TEST_CASE("T-2.6", "[Part_5]") {
+    printf("Testcase 2.6: Test FAT\n");
+    int fd;
+
+    const char *filename = "fi8234";
+    // remove file (just to be sure)
+    unlink(FILENAME);
+    unlink(filename);
+    char* buf = new char[FBLOCKS];;
+    // set up read & write buffer
+    char* r= new char[FBLOCKS];
+    memset(r, 0, FBLOCKS);
+    gen_random(r, FBLOCKS);
+    char* w= new char[FOBLOCKS];
+    memset(w, 0, FOBLOCKS);
+    gen_random(w, FOBLOCKS);
+
+    char* g = new char[FBLOCKS];
+    memcpy(g, r, FBLOCKS);
+    memcpy(g, w, FOBLOCKS);
+
+    // Create file
+    fd = open(FILENAME, O_EXCL | O_RDWR | O_CREAT, 0666);
+    REQUIRE(fd >= 0);
+
+    // Write to the file
+    REQUIRE(write(fd, w, FOBLOCKS) == FOBLOCKS);
+
+    // Close file
+    REQUIRE(close(fd) >= 0);
+
+    fd = open(filename, O_EXCL | O_RDWR | O_CREAT, 0666);
+    REQUIRE(fd >= 0);
+
+    // Write to the file
+    REQUIRE(write(fd, w, FOBLOCKS) == FOBLOCKS);
+
+    // Close file
+    REQUIRE(close(fd) >= 0);
+
+
+
+    // Open file again
+    fd = open(FILENAME, O_EXCL | O_RDWR, 0666);
+    REQUIRE(fd >= 0);
+
+    // Read from the file
+    REQUIRE(read(fd, buf, FOBLOCKS) == FOBLOCKS);
+    REQUIRE(memcmp(buf, w, FOBLOCKS) == 0);
+
+    // Close file
+    REQUIRE(close(fd) >= 0);
+
+    // Open file again
+    fd = open(filename, O_EXCL | O_RDWR, 0666);
+    REQUIRE(fd >= 0);
+
+    // Read from the file
+    REQUIRE(read(fd, buf, FOBLOCKS) == FOBLOCKS);
+    REQUIRE(memcmp(buf, w, FOBLOCKS) == 0);
+
+    // Close file
+    REQUIRE(close(fd) >= 0);
+
+
+
+    // Create file
+    fd = open(FILENAME, O_EXCL | O_RDWR, 0666);
+    REQUIRE(fd >= 0);
+
+    // Write to the file
+    REQUIRE(write(fd, r, FBLOCKS) == FBLOCKS);
+
+    // Close file
+    REQUIRE(close(fd) >= 0);
+
+
+
+    fd = open(FILENAME, O_EXCL | O_RDWR, 0666);
+    REQUIRE(fd >= 0);
+
+    REQUIRE(read(fd, buf, FBLOCKS) == FBLOCKS);
+    REQUIRE(memcmp(buf, r, FBLOCKS) == 0);
+
+    REQUIRE(close(fd) >= 0);
+    // remove file
+    REQUIRE(unlink(FILENAME) >= 0);
+    REQUIRE(unlink(filename) >= 0);
+}
