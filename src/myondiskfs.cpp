@@ -17,6 +17,7 @@
 #include <string.h>
 #include <errno.h>
 #include <algorithm>
+#include <regex>
 
 #include "macros.h"
 #include "myfs.h"
@@ -78,6 +79,11 @@ int MyOnDiskFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
         RETURN(-EINVAL);
     }
 
+    //check whether path is valid
+    if (iIsNameValid(path) < 0) {
+        RETURN (iIsNameValid(path));
+    }
+
     //overwrite all fileinfo values
     strcpy(myRoot[index].cPath, path);
     myRoot[index].size = 0;
@@ -121,8 +127,6 @@ int MyOnDiskFS::fuseUnlink(const char *path) {
         RETURN(-EEXIST);
     }
 
-    //TODO: do we need to close/release file first?
-
     //unlink blocks
     unlinkBlocks(myRoot[index].data);
     //reset myRoot
@@ -133,6 +137,11 @@ int MyOnDiskFS::fuseUnlink(const char *path) {
     //adjust helpers
     myFsEmpty[index] = true;
     iCounterFiles--;
+    if (myFsOpenFiles[index]) {
+        LOGF("file %ld was open while being deleted", index);
+        myFsOpenFiles[index] = false;
+        iCounterOpen--;
+    }
 
     RETURN(0);
 }
@@ -153,6 +162,11 @@ int MyOnDiskFS::fuseRename(const char *path, const char *newpath) {
     //check length of new filename
     if (strlen(newpath) - 1 > NAME_LENGTH) {
         RETURN(-EINVAL);
+    }
+
+    //check whether path is valid
+    if (iIsNameValid(path) < 0) {
+        RETURN (iIsNameValid(path));
     }
 
     size_t index = -1;
@@ -391,9 +405,14 @@ int MyOnDiskFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
 int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
     //LOGM();
 
-    // TODO: [PART 2] Implement this!
     if (0 > iIsPathValid(path, fileInfo->fh)) {
         RETURN(iIsPathValid(path, fileInfo->fh));
+    }
+
+    //file opened
+    if (!myFsOpenFiles[fileInfo->fh]) {
+        LOG("File not open");
+        RETURN(-EPERM);
     }
 
     //open container
@@ -491,9 +510,14 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
     //LOGM();
     //LOGF("parameters: path = %s, buf = %X, size = %ld, offset = %ld, fileinfo->fh = %ld", path, buf, size, offset, fileInfo->fh);
 
-    // TODO: [PART 2] Implement this!
     if (0 > iIsPathValid(path, fileInfo->fh)) {
         RETURN(iIsPathValid(path, fileInfo->fh));
+    }
+
+    //file opened
+    if (!myFsOpenFiles[fileInfo->fh]) {
+        LOG("File not open");
+        RETURN(-EPERM);
     }
 
     //open container
@@ -626,7 +650,7 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
     //write full blocks with no prefix and no suffix (writing from 0th byte in block to the 511th)
     //LOG("Writing full blocks");
     for (int i = 0; i < NUM_DATA_BLOCK_COUNT; i++) {
-        if (iterBuf > bufEND - BLOCK_SIZE || iterBlock == -1) {
+        if (iterBuf > bufEND - BLOCK_SIZE || iterBlock < 0) {
             //LOG("wrote all full blocks");
             break;
         }
@@ -641,6 +665,10 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
     if (iterBlock >= 0 && bufEND - iterBuf > 0) {
         //LOG("actually writing last block (didn't reach end of file yet)");
         memset(blockBuf, 0, BLOCK_SIZE);
+        if (info->size > size + offset) {
+            //we need to read block first since there is old data in this block
+            this->blockDevice->read(POS_DATA + iterBlock, blockBuf);
+        }
         tmpPtr = memcpy(blockBuf, iterBuf, std::max((long) 0, bufEND - iterBuf));
         if (tmpPtr == nullptr) {
             //LOG("memcpy of iterBuf till end of buf failed");
@@ -682,10 +710,6 @@ int MyOnDiskFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo) {
     int valid = iIsPathValid(path, fileInfo->fh);
     if (valid < 0) {
         RETURN(valid);
-    }
-
-    if (!myFsOpenFiles[valid]) {
-        RETURN(-EBADF);
     }
 
     //LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", fileInfo->fh, myRoot[fileInfo->fh].cPath, myRoot[fileInfo->fh].size, myRoot[fileInfo->fh].atime);
@@ -743,10 +767,15 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize) {
 int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_info *fileInfo) {
     //LOGM();
 
-    // TODO: [PART 2] Implement this!
 
     if (0 > iIsPathValid(path, fileInfo->fh)) {
         RETURN(iIsPathValid(path, fileInfo->fh));
+    }
+
+    //file opened
+    if (!myFsOpenFiles[fileInfo->fh]) {
+        LOG("File not open");
+        RETURN(-EPERM);
     }
 
     //open container
@@ -885,7 +914,6 @@ void *MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
         if (ret >= 0) {
             //LOG("Container file does exist, reading");
 
-            // TODO: [PART 2] Read existing structures form file
 
             //open container
             ret = this->blockDevice->open(containerFilePath);
@@ -975,7 +1003,6 @@ void *MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
 
             if (ret >= 0) {
 
-                // TODO: [PART 2] Create empty structures in file
 
                 //initialise superblock
                 mySuperBlock.infoSize = POS_DATA;
@@ -1073,12 +1100,18 @@ void *MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
 void MyOnDiskFS::fuseDestroy() {
     //LOGM();
 
-    // TODO: [PART 2] Implement this!
     //dumpStructures();
 
 }
 
-// TODO: [PART 2] You may add your own additional methods here!
+int MyOnDiskFS::iIsNameValid(const char *path) {
+    std::regex str_expr ("/[a-zA-Z0-9!?|]+");
+    if (regex_match(path, str_expr)) {
+        RETURN (0);
+    }
+    RETURN (-1);
+}
+
 
 /// unlinks all blocks of the file starting with Block "num"
 /// \param num first Block to be unlinked
