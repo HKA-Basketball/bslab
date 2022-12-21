@@ -17,7 +17,6 @@
 #include <string.h>
 #include <errno.h>
 #include <algorithm>
-#include <regex>
 
 #include "macros.h"
 #include "myfs.h"
