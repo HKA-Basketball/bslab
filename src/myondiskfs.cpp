@@ -547,7 +547,7 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
         }
 
         //empty file?
-        if (info->data == POS_NULLPTR) {
+        if (info->data == POS_NULLPTR || haveBlocks == 0) {
             //LOG("file was empty before");
             tmpBlock = findFreeBlock();
             if (tmpBlock >= ERROR_BLOCKNUMBER) {
@@ -837,7 +837,7 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
         //LOGF("synced block = %ld", tmpNum);
 
     } else if (newBlocks < oldBlocks) {
-        //file is getting smaller, we can free blocks
+        //LOG("file is getting smaller, we can free blocks");
         int32_t num = info->data;
         //iterate through myFat to reach last block of newSize
         //careful 0th iteration is already done with num = info->data
@@ -853,8 +853,10 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
         //don't need new Blocks -> do nothing
     }
 
-    info->size = newSize;
+    //LOGF("info->size NEW = %ld | info->size OLD = %ld", newSize, info->size);
+    info->size = newSize <= 0 ? POS_NULLPTR : newSize;
     syncRoot();
+    //LOGF("info->size = %ld", info->size);
 
     RETURN(0);
 }
