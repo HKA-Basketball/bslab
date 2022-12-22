@@ -87,7 +87,7 @@ public:
 
     int syncDmapFat(u_int32_t num);
 
-    int containerFull(size_t size, off_t offset);
+    int containerFull(size_t neededBlocks);
 
     int iIsPathValid(const char *path, uint64_t fh);
 
