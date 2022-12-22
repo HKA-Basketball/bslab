@@ -854,7 +854,7 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
     }
 
     //LOGF("info->size NEW = %ld | info->size OLD = %ld", newSize, info->size);
-    info->size = newSize <= 0 ? POS_NULLPTR : newSize;
+    info->size = newSize;// <= 0 ? POS_NULLPTR : newSize; // Getting Input/Output Errors
     syncRoot();
     //LOGF("info->size = %ld", info->size);
 
@@ -1071,7 +1071,7 @@ void *MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
                             //LOGF("ERROR: blockDevice couldn't write DMAP %d", ret);
                             RETURN(nullptr);
                         }
-                        LOGF("wrote DMAP %d Block", i);
+                        //LOGF("wrote DMAP %d Block", i);
                     }
                     //LOG("wrote DMAP");
 
@@ -1083,7 +1083,7 @@ void *MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
                             //LOGF("ERROR: blockDevice couldn't write FAT %d", ret);
                             RETURN(nullptr);
                         }
-                        LOGF("wrote FAT %d Block", i);
+                        //LOGF("wrote FAT %d Block", i);
                     }
                     //LOG("wrote FAT");
 
