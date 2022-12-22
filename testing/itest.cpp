@@ -810,6 +810,15 @@ TEST_CASE("T-2.6", "[Part_5]") {
     REQUIRE(memcmp(buf, r, FBLOCKS) == 0);
 
     REQUIRE(close(fd) >= 0);
+    
+    fd = open(filename, O_EXCL | O_RDWR, 0666);
+    REQUIRE(fd >= 0);
+
+    REQUIRE(read(fd, buf, FOBLOCKS) == FOBLOCKS);
+    REQUIRE(memcmp(buf, w, FOBLOCKS) == 0);
+
+    REQUIRE(close(fd) >= 0);
+    
     // remove file
     REQUIRE(unlink(FILENAME) >= 0);
     REQUIRE(unlink(filename) >= 0);
