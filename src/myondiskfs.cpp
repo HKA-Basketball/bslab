@@ -144,8 +144,17 @@ int MyOnDiskFS::fuseUnlink(const char *path) {
         RETURN(-EBUSY);
     }
 
-    //unlink blocks
-    unlinkBlocks(myRoot[index].data);
+    //LOGF( "\tUnlink of %s requested\n", path );
+    if (myRoot[index].data != POS_NULLPTR)
+    {
+        //unlink blocks
+        int retEr = unlinkBlocks(myRoot[index].data);
+        if (retEr < 0)
+        {
+            RETURN(retEr);
+        }
+    }
+
     //reset myRoot
     memset(&myRoot[index], 0, sizeof(MyFsDiskInfo));
     myRoot[index].data = POS_NULLPTR;
