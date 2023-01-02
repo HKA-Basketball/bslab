@@ -13,16 +13,29 @@ class MyOnDiskFS : public MyFS {
 protected:
     // BlockDevice blockDevice;
 
+    ulong blocks4DATA;
+    ulong blocks4SPBlock;
+    ulong blocks4DMAP;
+    ulong blocks4FAT;
+    ulong blocks4ROOT;
+
+    ulong posSPBlock;
+    ulong posDMAP;
+    ulong posFAT;
+    ulong posROOT;
+    ulong posDATA;
+    ulong posENDofDATA;
+
 public:
     static MyOnDiskFS *Instance();
 
     // TODO: [PART 1] Add attributes of your file system here
     SuperBlock mySuperBlock;
-    char myDmap[NUM_DATA_BLOCK_COUNT];      //Verzeichnis der freien Datenblöcke, 1 = empty, 0 = occupied
+    char myDmap[NUM_DATA_BLOCKS];      //Verzeichnis der freien Datenblöcke, 1 = empty, 0 = occupied
     /*
      *  myDmap[n] holds information about the nth block INSIDE the data segment, meaning it is indexed with 0 being the start of the data segment
      */
-    int32_t myFAT[NUM_DATA_BLOCK_COUNT];    //File Allocation Table FAT
+    int32_t myFAT[NUM_DATA_BLOCKS];    //File Allocation Table FAT
     /*
      *  myFAT[0] returns what block comes after. It is indexed with 0 being the start of the data segment
      *  If one wants to traverse through the FAT, one can simply myFAT[myFAT[myFAT[n]]] do like this, meaning no arithmetics between iterations are needed

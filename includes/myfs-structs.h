@@ -13,20 +13,8 @@
 #define BLOCK_SIZE 512
 #define NUM_DIR_ENTRIES 64
 #define NUM_OPEN_FILES 64
-#define NUM_DATA_BLOCK_COUNT 1 << 16 // 65.536
-#define BLOCKS_SPBLOCK 1 // 1 Block = 512
-#define BLOCKS_DMAP (NUM_DATA_BLOCK_COUNT/BLOCK_SIZE) // 128 Blöcke = 65.536
-#define BLOCKS_FAT ((NUM_DATA_BLOCK_COUNT/BLOCK_SIZE)*4) // 512 Blöcke = 262.144
-#define BLOCKS_ROOT NUM_DIR_ENTRIES // 64 Blöcke = 32.768
-// Start Pos
-#define POS_SPBLOCK 0
-#define POS_DMAP BLOCKS_SPBLOCK // 1 Block = 512
-#define POS_FAT POS_DMAP + BLOCKS_DMAP // 129 Blöcke = 66.048
-#define POS_ROOT POS_FAT + BLOCKS_FAT // 641 Blöcke = 328.192
-#define POS_DATA POS_ROOT + BLOCKS_ROOT // 705 Blöcke = 360.960
-// End of Data Blocks
-#define POS_END_DATA POS_DATA + NUM_DATA_BLOCK_COUNT // 66.241 Blöcke = 33.915.392
-//
+#define NUM_DATA_BLOCKS 1 << 16 // 65.536 = 2^16
+
 #define POS_NULLPTR -124 //used for empty files which need a blocknumber
 #define ERROR_BLOCKNUMBER 4294967296 // 2^32
 
