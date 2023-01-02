@@ -869,7 +869,17 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
     }
 
     //LOGF("info->size NEW = %ld | info->size OLD = %ld", newSize, info->size);
-    info->size = newSize;// <= 0 ? POS_NULLPTR : newSize; // Getting Input/Output Errors
+    info->size = newSize;
+
+    if (newSize <= 0)
+    {
+        info->size = newSize;
+        size_t tmpBlockNum = info->data;
+        info->data = POS_NULLPTR;
+        unlinkBlocks(tmpBlockNum);
+    }
+
+
     syncRoot();
     //LOGF("info->size = %ld", info->size);
 
