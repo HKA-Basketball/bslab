@@ -31,7 +31,7 @@ public:
 
     // TODO: [PART 1] Add attributes of your file system here
     SuperBlock mySuperBlock;
-    char myDmap[NUM_DATA_BLOCKS];      //Verzeichnis der freien Datenblöcke, 1 = empty, 0 = occupied
+    bool myDmap[NUM_DATA_BLOCKS];      //Verzeichnis der freien Datenblöcke, 1 = empty, 0 = occupied
     /*
      *  myDmap[n] holds information about the nth block INSIDE the data segment, meaning it is indexed with 0 being the start of the data segment
      */
@@ -88,6 +88,29 @@ public:
     virtual void fuseDestroy();
 
     // TODO: Add methods of your file system here
+
+    int readAll();
+
+    int writeAll();
+
+    int readSuperBlock();
+
+    int writeSuperBlock();
+
+    int readDmap();
+
+    int writeDmap();
+
+    int readFat();
+
+    int writeFat();
+
+    int readRoot();
+
+    int writeRoot();
+
+
+
     size_t findFreeBlock();
 
     void initializeHelpers();
@@ -95,10 +118,6 @@ public:
     void dumpStructures();
 
     int unlinkBlocks(int32_t num);
-
-    int syncRoot();
-
-    int syncDmapFat(u_int32_t num);
 
     int containerFull(size_t neededBlocks);
 

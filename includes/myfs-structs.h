@@ -56,6 +56,7 @@ struct SuperBlock {
     int32_t fatPos;
     int32_t rootPos;
     int32_t dataPos;
+    int16_t numFreeBlocks;
 };
 
 #endif /* myfs_structs_h */
