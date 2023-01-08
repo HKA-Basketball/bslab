@@ -812,6 +812,7 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize) {
 /// \return 0 on success, -ERRNO on failure.
 int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_info *fileInfo) {
     //LOGM();
+    readSuperBlock();
     readDmap();
     readFat();
     readRoot();
@@ -902,10 +903,10 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
     }
 
 
+    writeSuperBlock();
     writeDmap();
     writeFat();
     writeRoot();
-    writeSuperBlock();
     //LOGF("info->size = %ld", info->size);
 
     RETURN(0);
@@ -1051,6 +1052,7 @@ void MyOnDiskFS::fuseDestroy() {
 /// \param num first Block to be unlinked
 /// \return 0 on success, -ERRORNUMBER on failure
 int MyOnDiskFS::unlinkBlocks(int32_t num) {
+    readSuperBlock();
     readDmap();
     readFat();
 
@@ -1070,9 +1072,9 @@ int MyOnDiskFS::unlinkBlocks(int32_t num) {
         //syncSPBlock();
         //LOGF("synced block = %ld", tmpNum);
     }
+    writeSuperBlock();
     writeDmap();
     writeFat();
-    writeSuperBlock();
 
     RETURN(0);
 }
@@ -1162,26 +1164,12 @@ void MyOnDiskFS::dumpStructures() {
 
 int MyOnDiskFS::containerFull(size_t neededBlocks) {
     //LOGM();
-    //readSuperBlock();
-    //if (mySuperBlock.numFreeBlocks >= neededBlocks)
+    readSuperBlock();
+    if (mySuperBlock.numFreeBlocks >= neededBlocks)
     {
-    //    RETURN(0);
+        RETURN(0);
     }
-    readDmap();
 
-    size_t blocksFree = 0;
-    size_t blocksNeeded = neededBlocks;
-
-    for (size_t i = 0; i < this->blocks4DATA; i++) {
-        if (blocksFree >= blocksNeeded) {
-            //LOGF("NeededBlocks = %ld, blocksFree = %ld", blocksNeeded, blocksFree);
-            RETURN(0);
-        }
-        if (myDmap[i]) {
-            blocksFree++;
-        }
-    }
-    //LOGF("NeededBlocks = %ld, blocksFree = %ld", blocksNeeded, blocksFree);
     RETURN(1);
 }
 
