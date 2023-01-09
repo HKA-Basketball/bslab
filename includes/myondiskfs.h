@@ -88,6 +88,7 @@ public:
     virtual void fuseDestroy();
 
     // TODO: Add methods of your file system here
+    int allocateBlocks(int32_t numBlocks2Allocate, uint64_t fileHandle);
 
     int readAll();
 
