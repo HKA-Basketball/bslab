@@ -477,85 +477,99 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
 
     MyFsDiskInfo *info = &myRoot[fileInfo->fh];
 
-    if(size > info->size) {
-        LOG("Reading size is greater than filesize");
-        size = info->size;
+    // Check if the offset is within the file bounds
+    if (offset < 0 || offset >= info->size) {
+        LOG("Offset is not within the file bounds");
+        size = 0; // The Number of bytes read
     }
 
-    if((offset + size) > info->size) {
-        LOG("Reading size exceeds filesize with offset");
-        size = info->size - offset;
+    // Check if the file has blocks to read
+    if(info->data == POS_NULLPTR || info->size == 0) {
+        LOG("File is empty");
+        size = 0; // The Number of bytes read
     }
 
-    int32_t byteOffset = offset % BLOCK_SIZE;
+    if (size > 0) {
+        if (size > info->size) {
+            LOG("Reading size is greater than filesize");
+            size = info->size;
+        }
 
-    int32_t startBlockOffset = offset / BLOCK_SIZE;
-    int32_t endBlockOffset = (offset + size) / BLOCK_SIZE;
-    int32_t numBlocks2Read = std::max((u_long)std::ceil(((double)(size + byteOffset) / BLOCK_SIZE)), 1UL);
+        if ((offset + size) > info->size) {
+            LOG("Reading size exceeds filesize with offset");
+            size = info->size - offset;
+        }
 
-    int32_t curFATBlock = info->data;
-    int32_t start2ReadFAT;
+        int32_t byteOffset = offset % BLOCK_SIZE;
 
-    //LOGF("startBlockOffset = %ld, endBlockOffset = %ld, numBlocks2Read = %ld, curFATBlock = %ld", startBlockOffset, endBlockOffset, numBlocks2Read, curFATBlock);
+        int32_t startBlockOffset = offset / BLOCK_SIZE;
+        int32_t endBlockOffset = (offset + size) / BLOCK_SIZE;
+        int32_t numBlocks2Read = std::ceil(((double) (size + byteOffset) / BLOCK_SIZE));
 
-    for (size_t i = 0; i < startBlockOffset; i++) {
-        int32_t nextFATBlock = myFAT[curFATBlock];
+        int32_t curFATBlock = info->data;
+        int32_t start2ReadFAT;
 
-        //LOGF("nextFATBlock = %ld", nextFATBlock);
-        if (nextFATBlock == -1) {
-            if (i < startBlockOffset) {
-                RETURN(-300);
+        //LOGF("startBlockOffset = %ld, endBlockOffset = %ld, numBlocks2Read = %ld, curFATBlock = %ld", startBlockOffset, endBlockOffset, numBlocks2Read, curFATBlock);
+
+        for (size_t i = 0; i < startBlockOffset; i++) {
+            int32_t nextFATBlock = myFAT[curFATBlock];
+
+            //LOGF("nextFATBlock = %ld", nextFATBlock);
+            if (nextFATBlock == -1) {
+                if (i < startBlockOffset) {
+                    RETURN(-300);
+                }
+                //Last Block
+                start2ReadFAT = curFATBlock;
+                break;
             }
-            //Last Block
-            start2ReadFAT = curFATBlock;
-            break;
+            curFATBlock = nextFATBlock;
         }
-        curFATBlock = nextFATBlock;
+        start2ReadFAT = curFATBlock;
+        //LOGF("start2ReadFAT = %ld", start2ReadFAT);
+
+        char buffer[BLOCK_SIZE];
+
+        for (size_t i = 0; i < numBlocks2Read; i++) {
+            int ret = this->blockDevice->read(this->posDATA + start2ReadFAT, buffer);
+            if (ret < 0) {
+                //LOG("Couldn't read from Container");
+                RETURN (-4000);
+            }
+            void *retPtr = nullptr;
+            if (i == 0) {
+                retPtr = memcpy(buf + i * BLOCK_SIZE, buffer + byteOffset, BLOCK_SIZE - byteOffset);
+            }
+
+            if (i == numBlocks2Read) {
+                retPtr = memcpy(buf + i * BLOCK_SIZE, buffer, BLOCK_SIZE - (byteOffset + (size % BLOCK_SIZE)));
+            }
+
+            if (0 > i < numBlocks2Read) {
+                retPtr = memcpy(buf + i * BLOCK_SIZE, buffer, BLOCK_SIZE);
+            }
+
+            if (retPtr == nullptr) {
+                //LOG("memcpy failed");
+                RETURN (-5000);
+            }
+
+            start2ReadFAT = myFAT[start2ReadFAT];
+
+            /*char debugBuf[BLOCK_SIZE + 1];
+            memcpy(debugBuf, buffer, BLOCK_SIZE);
+            debugBuf[BLOCK_SIZE] = '\0';
+            LOGF("BlockBuf = %s", debugBuf);*/
+        }
+
+        /*char* debugBuf2 = (char*)malloc(size + 1);
+        if (debugBuf2 != nullptr) {
+            memcpy(debugBuf2, buf, size);
+            debugBuf2[size] = '\0';
+            LOGF("BlockBuf2 = %s", debugBuf2);
+        }
+        free(debugBuf2);*/
     }
-    start2ReadFAT = curFATBlock;
-    //LOGF("start2ReadFAT = %ld", start2ReadFAT);
-
-    char buffer[BLOCK_SIZE];
-
-    for (size_t i = 0; i < numBlocks2Read; i++) {
-        int ret = this->blockDevice->read(this->posDATA + start2ReadFAT, buffer);
-        if (ret < 0) {
-            //LOG("Couldn't read from Container");
-            RETURN (-4000);
-        }
-        void *retPtr = nullptr;
-        if (i == 0) {
-            retPtr = memcpy(buf + i * BLOCK_SIZE, buffer + byteOffset, BLOCK_SIZE - byteOffset);
-        }
-
-        if (i == numBlocks2Read) {
-            retPtr = memcpy(buf + i * BLOCK_SIZE, buffer, BLOCK_SIZE - (byteOffset + (size % BLOCK_SIZE)));
-        }
-
-        if (0 > i < numBlocks2Read) {
-            retPtr = memcpy(buf + i * BLOCK_SIZE, buffer, BLOCK_SIZE);
-        }
-
-        if (retPtr == nullptr) {
-            //LOG("memcpy failed");
-            RETURN (-5000);
-        }
-
-        start2ReadFAT = myFAT[start2ReadFAT];
-
-        /*char debugBuf[BLOCK_SIZE + 1];
-        memcpy(debugBuf, buffer, BLOCK_SIZE);
-        debugBuf[BLOCK_SIZE] = '\0';
-        LOGF("BlockBuf = %s", debugBuf);*/
-    }
-
-    /*char* debugBuf2 = (char*)malloc(size + 1);
-    if (debugBuf2 != nullptr) {
-        memcpy(debugBuf2, buf, size);
-        debugBuf2[size] = '\0';
-        LOGF("BlockBuf2 = %s", debugBuf2);
-    }
-    free(debugBuf2);*/
 
     info->atime = time(NULL);
 
@@ -616,7 +630,7 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
         readDmap();
         readFat();
         readRoot();
-        LOGF("Alloc ret = %ld", ret);
+        //LOGF("Alloc ret = %ld", ret);
         if (ret < 0) {
             RETURN(ret);
         }
@@ -712,9 +726,6 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
     writeDmap();
     writeFat();
     writeRoot();
-
-
-    //dumpStructures();
 
     RETURN(size);
 }
@@ -822,7 +833,7 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
             RETURN(num);
         }
         info->data = num;
-        //syncRoot();
+
         newBlocks--;
         oldBlocks++;
     }
@@ -918,9 +929,9 @@ void *MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
         // turn of logfile buffering
         setvbuf(this->logFile, NULL, _IOLBF, 0);
 
-        //LOG("Starting logging...\n");
+        /*LOG("Starting logging...\n");
 
-        //LOG("Using on-disk mode");
+        LOG("Using on-disk mode");
 
         LOG("Blocks of Sections:");
         LOGF("blocks4DATA: %d", this->blocks4DATA);
@@ -937,7 +948,7 @@ void *MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
         LOGF("posDATA: %d", this->posDATA);
 
         LOG("End Pos of Data Section:");
-        LOGF("posENDofDATA: %d", this->posENDofDATA);
+        LOGF("posENDofDATA: %d", this->posENDofDATA);*/
 
         this->containerFilePath = ((MyFsInfo *) fuse_get_context()->private_data)->contFile;
 
@@ -974,8 +985,8 @@ void *MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
             }
         }
 
-        LOG("SuperBlock:");
-        LOGF("numFreeBlocks: %d", this->mySuperBlock.numFreeBlocks);
+        /*LOG("SuperBlock:");
+        LOGF("numFreeBlocks: %d", this->mySuperBlock.numFreeBlocks);*/
 
         if (ret < 0) {
             //LOGF("ERROR: Access to container file failed with error %d", ret);
@@ -994,20 +1005,6 @@ void MyOnDiskFS::fuseDestroy() {
     //dumpStructures();
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /// unlinks all blocks of the file starting with Block "num"
 /// \param num first Block to be unlinked
 /// \return 0 on success, -ERRORNUMBER on failure
@@ -1020,21 +1017,26 @@ int MyOnDiskFS::unlinkBlocks(int32_t num) {
         RETURN(2);
     }
 
-    if (num >= this->blocks4DATA && num < 0) {
+    if (num > this->blocks4DATA && num < 0) {
         //LOGF("num = %ld not valid", num);
         RETURN(-1111);
     }
-    int32_t iterNum = num;
-    for (int i = 0; iterNum >= 0 && iterNum < this->blocks4DATA && i < this->blocks4DATA; i++) {
-        int32_t tmpNum = iterNum;
-        myDmap[tmpNum] = 1;
+
+    u_int64_t tmpBlock = 0;
+    u_int64_t iterBlock = 0;
+
+    iterBlock = num;
+
+    while (tmpBlock != -1) {
+        myDmap[iterBlock] = 1;
         mySuperBlock.numFreeBlocks++;
-        //LOGF("  numFreeBlocks = %ld ", mySuperBlock.numFreeBlocks);
-        //iterate through FAT and delete Fat-entry for the link we just used
-        iterNum = myFAT[tmpNum];
-        myFAT[tmpNum] = -1;
-        //LOGF("synced block = %ld", tmpNum);
+
+        tmpBlock = myFAT[iterBlock];
+        myFAT[iterBlock] = -1;
+
+        iterBlock = tmpBlock;
     }
+
     writeSuperBlock();
     writeDmap();
     writeFat();
@@ -1080,55 +1082,6 @@ void MyOnDiskFS::initializeHelpers() {
     //LOG("initialized myFsEmpty, myFsOpenFiles, iCounterOpen, iCounterFiles");
 }
 
-void MyOnDiskFS::dumpStructures() {
-    /*
-    //LOGM();
-    //LOG("Dumping structures");
-    //LOGF("Dumping Superblock:\n"
-         "                mySuperBlock.infoSize = %ld;\n"
-         "                mySuperBlock.dataSize = %ld;\n"
-         "                mySuperBlock.blockPos = %ld;\n"
-         "                mySuperBlock.dataPos = %ld;\n"
-         "                mySuperBlock.dmapPos = %ld;\n"
-         "                mySuperBlock.rootPos = %ld;\n"
-         "                mySuperBlock.fatPos = %ld;",
-         mySuperBlock.infoSize, mySuperBlock.dataSize, mySuperBlock.blockPos,
-         mySuperBlock.dataPos, mySuperBlock.dmapPos, mySuperBlock.rootPos, mySuperBlock.fatPos);
-    //LOG("Dumping DMAP");
-    for (int i = 0; i < this->blocks4DATA; i++) {
-        if (myDmap[i] != 1) {
-            //LOGF("myDmap[%ld] = %ld", i, myDmap[i]);
-        }
-    }
-    //LOG("Dumping FAT");
-    for (int i = 0; i < this->blocks4DATA; i++) {
-        if (myFAT[i] != -1) {
-            //LOGF("myFAT[%ld] = %d", i, myFAT[i]);
-        }
-    }
-    //LOG("Dumping Root");
-    for (int i = 0; i < NUM_DIR_ENTRIES && myRoot[i].data != POS_NULLPTR; i++) {
-        //LOGF("File %ld:"
-             "    size_t size = %ld\n"
-             "    int32_t data = %ld\n"
-             "    __uid_t uid = %ld\n"
-             "    __gid_t gid = %ld\n"
-             "    __mode_t mode = %ld\n"
-             "    __time_t atime = %ld\n"
-             "    __time_t mtime = %ld\n"
-             "    __time_t ctime = %ld\n"
-             "    char cPath[NAME_LENGTH+1] = %s", i, myRoot[i].size, myRoot[i].data,
-             myRoot[i].uid, myRoot[i].gid, myRoot[i].mode, myRoot[i].atime, myRoot[i].mtime, myRoot[i].ctime, myRoot[i].cPath);
-    }
-    //LOG("Dumping Helpers");
-    //LOGF("    bool myFsOpenFiles[0] = %ld\n"
-         "    bool myFsEmpty[0] = %ld\n"
-         "    unsigned int iCounterFiles = %ld\n"
-         "    unsigned int iCounterOpen = %ld", myFsOpenFiles[0], myFsEmpty[0], iCounterFiles, iCounterOpen);
-    //LOG("END OF Dumping structures");
-    */
-}
-
 int MyOnDiskFS::containerFull(size_t neededBlocks) {
     //LOGM();
     readSuperBlock();
@@ -1168,22 +1121,13 @@ int MyOnDiskFS::iFindEmptySpot() {
     RETURN(-ENOSPC);
 }
 
-// DO NOT EDIT ANYTHING BELOW THIS LINE!!!
-
-/// @brief Set the static instance of the file system.
-///
-/// Do not edit this method!
-void MyOnDiskFS::SetInstance() {
-    MyFS::_instance = new MyOnDiskFS();
-}
-
 int MyOnDiskFS::allocateBlocks(int32_t numBlocks2Allocate, uint64_t fileHandle)
 {
     readFat();
     readRoot();
 
     u_int64_t tmpBlock = 0;
-    int32_t iterBlock = 0;
+    u_int64_t iterBlock = 0;
     //LOGF("numBlocks2Allocate = %ld", numBlocks2Allocate);
 
     //enough space in container?
@@ -1429,4 +1373,13 @@ int MyOnDiskFS::writeRoot(){
     free(buffer);
 
     return 0;
+}
+
+// DO NOT EDIT ANYTHING BELOW THIS LINE!!!
+
+/// @brief Set the static instance of the file system.
+///
+/// Do not edit this method!
+void MyOnDiskFS::SetInstance() {
+    MyFS::_instance = new MyOnDiskFS();
 }
