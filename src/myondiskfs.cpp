@@ -820,9 +820,9 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
 
     if (oldBlocks <= 0 && newBlocks >= 1) {
         //LOG("file was empty");
-        int32_t num = iFindEmptySpot();
+        int32_t num = findFreeBlock();
         if (num < 0) {
-            //LOG("iFindEmptySpot() failed");
+            //LOG("findFreeBlock() failed");
             RETURN(num);
         }
         info->data = num;
