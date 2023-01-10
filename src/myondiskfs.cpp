@@ -617,7 +617,6 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
     MyFsDiskInfo *info = &myRoot[fileInfo->fh];
     size_t totalNeededBlocks = ceil((double) (size + offset) / BLOCK_SIZE);
     size_t haveBlocks = ceil(((double) info->size) / BLOCK_SIZE);
-    size_t blocks2Write = totalNeededBlocks - haveBlocks;
     //LOGF("(size+offset)/BLOCK_SIZE = %lf", ((double)(size+offset))/BLOCK_SIZE);
     //LOGF("info->size/BLOCK_SIZE = %lf", ((double)info->size)/BLOCK_SIZE);
     //LOGF("totalNeededBlocks = %ld, haveBlocks = %ld", totalNeededBlocks, haveBlocks);
