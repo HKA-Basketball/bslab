@@ -110,15 +110,11 @@ public:
 
     int writeRoot();
 
-
-
     size_t findFreeBlock();
 
     void initializeHelpers();
 
-    void dumpStructures();
-
-    int unlinkBlocks(int32_t num);
+    int freeBlocks(int32_t num);
 
     int containerFull(size_t neededBlocks);
 
