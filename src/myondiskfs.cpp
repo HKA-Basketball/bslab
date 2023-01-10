@@ -244,7 +244,7 @@ int MyOnDiskFS::fuseRename(const char *path, const char *newpath) {
 
     //overwrite fileinfo values
     strcpy(myRoot[index].cPath, newpath);
-    myRoot[index].atime = myRoot[index].ctime = myRoot[index].mtime = time(NULL);
+    myRoot[index].atime = myRoot[index].ctime = time(NULL);
 
     writeRoot();
 
@@ -351,7 +351,7 @@ int MyOnDiskFS::fuseChmod(const char *path, mode_t mode) {
 
     //overwrite fileinfo values
     myRoot[index].mode = mode;
-    myRoot[index].atime = myRoot[index].ctime = myRoot[index].mtime = time(NULL);
+    myRoot[index].atime = myRoot[index].ctime = time(NULL);
 
     writeRoot();
     RETURN(0);
@@ -390,7 +390,7 @@ int MyOnDiskFS::fuseChown(const char *path, uid_t uid, gid_t gid) {
     //overwrite fileinfo values
     myRoot[index].uid = uid;
     myRoot[index].gid = gid;
-    myRoot[index].atime = myRoot[index].ctime = myRoot[index].mtime = time(NULL);
+    myRoot[index].atime = myRoot[index].ctime = time(NULL);
 
     writeRoot();
     RETURN(0);
@@ -425,7 +425,7 @@ int MyOnDiskFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
                 myFsOpenFiles[i] = true;
                 fileInfo->fh = i; // can be used in fuseRead and fuseRelease
                 iCounterOpen++;
-                myRoot[i].atime = time(NULL);
+                myRoot[i].atime = myRoot[i].ctime = time(NULL);
                 //LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", i, myRoot[i].cPath, myRoot[i].size, myRoot[i].atime);
                 //LOGF("index: %d, iCounterOpen: %d", i, iCounterOpen);
                 break;
@@ -570,7 +570,7 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
         free(debugBuf2);*/
     }
 
-    info->atime = time(NULL);
+    info->atime = info->ctime = time(NULL);
 
     writeRoot();
 
@@ -847,6 +847,7 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
             //LOG("failed inside freeBlocks");
             RETURN (ret);
         }
+        info->mtime = time(NULL);
         //LOGF("synced block = %ld", num);
     } else {
         //LOG("don't need new Blocks -> do nothing");
@@ -860,8 +861,10 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
         size_t tmpBlockNum = info->data;
         info->data = POS_NULLPTR;
         freeBlocks(tmpBlockNum);
+        info->mtime = time(NULL);
     }
 
+    info->atime = info->ctime = time(NULL);
 
     writeSuperBlock();
     writeDmap();
@@ -899,9 +902,12 @@ int MyOnDiskFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t filler,
             if (!myFsEmpty[i]) {
                 //LOGF("adding to filler: %s", myRoot[i].cPath+1);
                 filler(buf, myRoot[i].cPath + 1, NULL, 0);
+                myRoot[i].atime = myRoot[i].ctime = time(NULL);
             }
         }
     }
+
+    writeRoot();
 
     RETURN(0);
 }
@@ -993,7 +999,6 @@ void *MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
 void MyOnDiskFS::fuseDestroy() {
     //LOGM();
     this->blockDevice->close();
-    //dumpStructures();
 }
 
 /// unlinks all blocks of the file starting with Block "num"
