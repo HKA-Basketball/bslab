@@ -526,6 +526,7 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
         //LOGF("start2ReadFAT = %ld", start2ReadFAT);
 
         char buffer[BLOCK_SIZE];
+        char* bufIter = buf;
 
         for (size_t i = 0; i < numBlocks2Read; i++) {
             int ret = this->blockDevice->read(this->posDATA + start2ReadFAT, buffer);
@@ -534,18 +535,25 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
                 RETURN (-4000);
             }
             void *retPtr = nullptr;
-            if (i == 0) {
-                retPtr = memcpy(buf + i * BLOCK_SIZE, buffer + byteOffset,
+            if (byteOffset > 0) {
+                //read first block (read less than 512 bytes)
+                retPtr = memcpy(bufIter, buffer + byteOffset,
                                 std::min(size, (size_t) BLOCK_SIZE - byteOffset));
+                bufIter += std::min(size, (size_t) BLOCK_SIZE - byteOffset);
+                byteOffset = 0;
             }
 
-            if (i == numBlocks2Read) {
-                retPtr = memcpy(buf + i * BLOCK_SIZE, buffer,
-                                std::max(0UL, (u_long) (BLOCK_SIZE - (byteOffset + (size % BLOCK_SIZE)))));
+            else if (bufIter + BLOCK_SIZE > buf + size) {
+                //read last block (read less than 512 bytes)
+                retPtr = memcpy(bufIter, buffer,
+                                std::max(0UL, (u_long) (buf + size - bufIter)));
+                break;
             }
 
-            if (i > 0 && i < numBlocks2Read) {
-                retPtr = memcpy(buf + i * BLOCK_SIZE, buffer, BLOCK_SIZE);
+            else if (bufIter + BLOCK_SIZE <= buf + size) {
+                //read full blocks
+                retPtr = memcpy(bufIter, buffer, BLOCK_SIZE);
+                bufIter += BLOCK_SIZE;
             }
 
             if (retPtr == nullptr) {
@@ -561,13 +569,13 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
             LOGF("BlockBuf = %s", debugBuf);*/
         }
 
-        /*char* debugBuf2 = (char*)malloc(size + 1);
+        char* debugBuf2 = (char*)malloc(size + 1);
         if (debugBuf2 != nullptr) {
             memcpy(debugBuf2, buf, size);
             debugBuf2[size] = '\0';
             LOGF("BlockBuf2 = %s", debugBuf2);
         }
-        free(debugBuf2);*/
+        free(debugBuf2);
     }
 
     info->atime = info->ctime = time(NULL);
@@ -643,6 +651,7 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
     u_int32_t offsetByte = offset % BLOCK_SIZE;
     //LOGF("startBlock = %ld, offsetByte = %ld", startBlock, offsetByte);
     int32_t numBlocks2Write = std::ceil(((double) (size + offsetByte) / BLOCK_SIZE));
+    const char* bufIter = buf;
 
     iterBlock = info->data;
 
@@ -666,7 +675,8 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
 
     for (size_t i = 0; i < numBlocks2Write; i++) {
         void *retPtr = nullptr;
-        if (i == 0) {
+        if (offsetByte > 0) {
+            //write first block (writing less than 512 bytes)
             memset(buffer, 0, BLOCK_SIZE);
             int ret = this->blockDevice->read(this->posDATA + offsetBlock, buffer);
             if (ret < 0) {
@@ -674,11 +684,14 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
                 RETURN (-4000);
             }
 
-            retPtr = memcpy(buffer + offsetByte, buf + i * BLOCK_SIZE,
+            retPtr = memcpy(buffer + offsetByte, bufIter,
                             std::min(size, (size_t) BLOCK_SIZE - offsetByte));
+            bufIter += std::min(size, (size_t) BLOCK_SIZE - offsetByte);
+            offsetByte = 0;
         }
 
-        if (i == numBlocks2Write) {
+        else if (bufIter + BLOCK_SIZE > buf + size) {
+            //write last block (writing less than 512 bytes)
             memset(buffer, 0, BLOCK_SIZE);
             if (info->size > size + offset) {
                 int ret = this->blockDevice->read(this->posDATA + offsetBlock, buffer);
@@ -688,12 +701,14 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
                 }
             }
 
-            retPtr = memcpy(buffer, buf + i * BLOCK_SIZE,
-                            std::max(0UL, (u_long) (BLOCK_SIZE - (offsetByte + (size % BLOCK_SIZE)))));
+            retPtr = memcpy(buffer, bufIter,
+                            std::max(0UL, (u_long) (buf + size - bufIter)));
         }
 
-        if (i > 0 && i < numBlocks2Write) {
+        else if (bufIter + BLOCK_SIZE <= buf + size) {
+            //write full blocks inbetween first and last
             retPtr = memcpy(buffer, buf + i * BLOCK_SIZE, BLOCK_SIZE);
+            bufIter += BLOCK_SIZE;
         }
 
         if (retPtr == nullptr) {
@@ -705,10 +720,10 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
 
         offsetBlock = myFAT[offsetBlock];
 
-        /*char debugBuf[BLOCK_SIZE + 1];
+        char debugBuf[BLOCK_SIZE + 1];
         memcpy(debugBuf, buffer, BLOCK_SIZE);
         debugBuf[BLOCK_SIZE] = '\0';
-        LOGF("BlockBuf = %s", debugBuf);*/
+        LOGF("BlockBuf = %s", debugBuf);
     }
 
     info->size = std::max(size + offset, info->size);
