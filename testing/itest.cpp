@@ -18,6 +18,8 @@
 #define FILENAME "file"
 #define SMALL_SIZE 1024
 #define LARGE_SIZE 20*1024*1024
+#define OVERFLOW_SIZE ((1 << 16) + 1) * 512
+#define MAX_SIZE (1 << 16) * 512
 
 #define FBLOCKS 512*4
 #define FOBLOCKS 512+(512/2)
@@ -499,11 +501,6 @@ TEST_CASE("T-1.10", "[Part_1]") {
     REQUIRE(unlink(FILENAME) >= 0);
 }
 
-TEST_CASE("T-20.10", "Lennart") {
-
-}
-
-
 TEST_CASE("T-2.1", "[Part_2]") {
     printf("Testcase 2.1: Readdir function returns '.' and '..'\n");
 
@@ -810,7 +807,55 @@ TEST_CASE("T-2.6", "[Part_5]") {
     REQUIRE(memcmp(buf, r, FBLOCKS) == 0);
 
     REQUIRE(close(fd) >= 0);
+    
+    fd = open(filename, O_EXCL | O_RDWR, 0666);
+    REQUIRE(fd >= 0);
+
+    REQUIRE(read(fd, buf, FOBLOCKS) == FOBLOCKS);
+    REQUIRE(memcmp(buf, w, FOBLOCKS) == 0);
+
+    REQUIRE(close(fd) >= 0);
+    
     // remove file
     REQUIRE(unlink(FILENAME) >= 0);
     REQUIRE(unlink(filename) >= 0);
+}
+
+TEST_CASE("T-2.7", "[Part_2]") {
+    printf("Testcase 2.7: Write a Overflow file\n");
+    int fd;
+
+    // remove file (just to be sure)
+    unlink(FILENAME);
+
+    // set up read & write buffer
+    char* r= new char[OVERFLOW_SIZE];
+    memset(r, 0, OVERFLOW_SIZE);
+    char* w= new char[OVERFLOW_SIZE];
+    memset(w, 0, OVERFLOW_SIZE);
+    gen_random(w, OVERFLOW_SIZE);
+
+    // Create file
+    fd = open(FILENAME, O_EXCL | O_RDWR | O_CREAT, 0666);
+    REQUIRE(fd >= 0);
+
+    // Write to the file
+    REQUIRE(write(fd, w, OVERFLOW_SIZE) == MAX_SIZE);
+
+    // Close file
+    REQUIRE(close(fd) >= 0);
+
+    // Open file again
+    fd = open(FILENAME, O_EXCL | O_RDWR, 0666);
+    REQUIRE(fd >= 0);
+
+    // Read from the file
+    REQUIRE(read(fd, r, OVERFLOW_SIZE) == MAX_SIZE);
+    REQUIRE(memcmp(r, w, OVERFLOW_SIZE) != 0);
+
+    // Close file
+    REQUIRE(close(fd) >= 0);
+
+    // remove file
+    REQUIRE(unlink(FILENAME) >= 0);
 }

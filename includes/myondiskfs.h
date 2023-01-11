@@ -13,16 +13,29 @@ class MyOnDiskFS : public MyFS {
 protected:
     // BlockDevice blockDevice;
 
+    ulong blocks4DATA;
+    ulong blocks4SPBlock;
+    ulong blocks4DMAP;
+    ulong blocks4FAT;
+    ulong blocks4ROOT;
+
+    ulong posSPBlock;
+    ulong posDMAP;
+    ulong posFAT;
+    ulong posROOT;
+    ulong posDATA;
+    ulong posENDofDATA;
+
 public:
     static MyOnDiskFS *Instance();
 
     // TODO: [PART 1] Add attributes of your file system here
     SuperBlock mySuperBlock;
-    char myDmap[NUM_DATA_BLOCK_COUNT];      //Verzeichnis der freien Datenblöcke, 1 = empty, 0 = occupied
+    bool myDmap[NUM_DATA_BLOCKS];      //Verzeichnis der freien Datenblöcke, 1 = empty, 0 = occupied
     /*
      *  myDmap[n] holds information about the nth block INSIDE the data segment, meaning it is indexed with 0 being the start of the data segment
      */
-    int32_t myFAT[NUM_DATA_BLOCK_COUNT];    //File Allocation Table FAT
+    int32_t myFAT[NUM_DATA_BLOCKS];    //File Allocation Table FAT
     /*
      *  myFAT[0] returns what block comes after. It is indexed with 0 being the start of the data segment
      *  If one wants to traverse through the FAT, one can simply myFAT[myFAT[myFAT[n]]] do like this, meaning no arithmetics between iterations are needed
@@ -75,19 +88,35 @@ public:
     virtual void fuseDestroy();
 
     // TODO: Add methods of your file system here
+    int allocateBlocks(int32_t numBlocks2Allocate, uint64_t fileHandle);
+
+    int readAll();
+
+    int writeAll();
+
+    int readSuperBlock();
+
+    int writeSuperBlock();
+
+    int readDmap();
+
+    int writeDmap();
+
+    int readFat();
+
+    int writeFat();
+
+    int readRoot();
+
+    int writeRoot();
+
     size_t findFreeBlock();
 
     void initializeHelpers();
 
-    void dumpStructures();
+    int freeBlocks(int32_t num);
 
-    int unlinkBlocks(int32_t num);
-
-    int syncRoot();
-
-    int syncDmapFat(u_int32_t num);
-
-    int containerFull(size_t size, off_t offset);
+    int containerFull(size_t neededBlocks);
 
     int iIsPathValid(const char *path, uint64_t fh);
 

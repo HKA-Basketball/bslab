@@ -13,16 +13,8 @@
 #define BLOCK_SIZE 512
 #define NUM_DIR_ENTRIES 64
 #define NUM_OPEN_FILES 64
-#define NUM_DATA_BLOCK_COUNT 268435456 // 2^28
-#define BLOCKS_SPBLOCK 1
-#define BLOCKS_DMAP (NUM_DATA_BLOCK_COUNT/BLOCK_SIZE)
-#define BLOCKS_FAT ((NUM_DATA_BLOCK_COUNT*4)/BLOCK_SIZE)
-#define BLOCKS_ROOT NUM_DIR_ENTRIES
-#define POS_SPBLOCK 0
-#define POS_DMAP BLOCKS_SPBLOCK
-#define POS_FAT POS_DMAP + BLOCKS_DMAP
-#define POS_ROOT POS_FAT + BLOCKS_FAT
-#define POS_DATA POS_ROOT + BLOCKS_ROOT
+#define NUM_DATA_BLOCKS 1 << 16 // 65.536 = 2^16
+
 #define POS_NULLPTR -124 //used for empty files which need a blocknumber
 #define ERROR_BLOCKNUMBER 4294967296 // 2^32
 
@@ -38,7 +30,6 @@ struct MyFsFileInfo {
     struct timespec mtime;        // Time of last modification.
     struct timespec ctime;        // Time of last status change.
 
-    //const char* cPath;                // Path to the file
     char cPath[NAME_LENGTH + 1];    // Path to the file
 };
 
@@ -65,6 +56,7 @@ struct SuperBlock {
     int32_t fatPos;
     int32_t rootPos;
     int32_t dataPos;
+    int32_t numFreeBlocks;
 };
 
 #endif /* myfs_structs_h */
