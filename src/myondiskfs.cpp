@@ -845,7 +845,7 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
         info->mtime = time(NULL);
     }
 
-    info->atime = info->ctime = time(NULL);
+    info->atime = info->ctime = info->ctime = time(NULL);
 
     writeSuperBlock();
     writeDmap();
