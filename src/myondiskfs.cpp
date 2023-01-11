@@ -1138,24 +1138,6 @@ int MyOnDiskFS::allocateBlocks(int32_t numBlocks2Allocate, uint64_t fileHandle) 
     RETURN(1);
 }
 
-int MyOnDiskFS::readAll() {
-    readSuperBlock();
-    readDmap();
-    readFat();
-    readRoot();
-
-    return 0;
-}
-
-int MyOnDiskFS::writeAll() {
-    writeSuperBlock();
-    writeDmap();
-    writeFat();
-    writeRoot();
-
-    return 0;
-}
-
 int MyOnDiskFS::readSuperBlock() {
     // Allocate a buffer for the SuperBlock
     char *buffer = (char *) malloc(BLOCK_SIZE);
