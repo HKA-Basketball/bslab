@@ -559,6 +559,7 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
             LOGF("BlockBuf = %s", debugBuf);*/
         }
 
+        /*
         char* debugBuf2 = (char*)malloc(size + 1);
         if (debugBuf2 != nullptr) {
             memcpy(debugBuf2, buf, size);
@@ -566,6 +567,7 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
             LOGF("BlockBuf2 = %s", debugBuf2);
         }
         free(debugBuf2);
+         */
     }
 
     info->atime = info->ctime = time(NULL);
@@ -710,10 +712,12 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
 
         offsetBlock = myFAT[offsetBlock];
 
+        /*
         char debugBuf[BLOCK_SIZE + 1];
         memcpy(debugBuf, buffer, BLOCK_SIZE);
         debugBuf[BLOCK_SIZE] = '\0';
         LOGF("BlockBuf = %s", debugBuf);
+         */
     }
 
     info->size = std::max(size + offset, info->size);
