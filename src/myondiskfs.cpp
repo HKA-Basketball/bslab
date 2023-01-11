@@ -89,7 +89,6 @@ MyOnDiskFS::~MyOnDiskFS() {
 /// \return 0 on success, -ERRNO on failure.
 int MyOnDiskFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     //LOGM();
-
     readRoot();
 
     //filesystem full?
@@ -108,7 +107,6 @@ int MyOnDiskFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
             continue;
         }
 
-        //LOGF("comparing path = %s, info.cPath = %s, strcmp(path, info.cPath) = %ld", path, info.cPath, strcmp(path, info.cPath));
         if (strcmp(path, myRoot[i].cPath) == 0) {
             RETURN(-EEXIST); // already exists
         }
@@ -139,10 +137,6 @@ int MyOnDiskFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     iCounterFiles++;
 
     writeRoot();
-
-    //LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", index, myRoot[index].cPath, myRoot[index].size, myRoot[index].atime);
-    //LOGF("iCounterFiles: %d", iCounterFiles);
-
     RETURN(0);
 }
 
@@ -154,30 +148,30 @@ int MyOnDiskFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
 /// \return 0 on success, -ERRNO on failure.
 int MyOnDiskFS::fuseUnlink(const char *path) {
     //LOGM();
-
     readRoot();
 
-    u_int32_t index = -1;
-
-    //find file index
+    // Get index of file by path
+    size_t index = -1;
     for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
         if (strcmp(path, myRoot[i].cPath) == 0) {
             //found file
             index = i;
         }
     }
+
+    // Check if the file has been found
     if (index < 0) {
-        //file doesn't exist
-        RETURN(-EEXIST);
+        // No such file or directory
+        RETURN(-ENOENT);
     }
 
     if (myFsOpenFiles[index]) {
         RETURN(-EBUSY);
     }
 
-    //LOGF( "\tUnlink of %s requested\n", path );
+    // Check if there are blocks to be freed
     if (myRoot[index].data != POS_NULLPTR) {
-        //unlink blocks
+        // Free allocated blocks
         int retEr = freeBlocks(myRoot[index].data);
         if (retEr < 0) {
             RETURN(retEr);
@@ -194,7 +188,6 @@ int MyOnDiskFS::fuseUnlink(const char *path) {
     iCounterFiles--;
 
     writeRoot();
-
     RETURN(0);
 }
 
@@ -209,16 +202,15 @@ int MyOnDiskFS::fuseUnlink(const char *path) {
 /// \return 0 on success, -ERRNO on failure.
 int MyOnDiskFS::fuseRename(const char *path, const char *newpath) {
     //LOGM();
-    //LOGF("Old filepath: %s, New filepath: %s", path, newpath);
     readRoot();
 
-    //check length of new filename
+    // Check length of new filename
     if (strlen(newpath) - 1 > NAME_LENGTH) {
         RETURN(-EINVAL);
     }
 
+    // Get index of file by path
     size_t index = -1;
-
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++) {
         if (myFsEmpty[i]) {
             continue;
@@ -240,16 +232,11 @@ int MyOnDiskFS::fuseRename(const char *path, const char *newpath) {
         RETURN(-ENOENT);
     }
 
-    //LOGF("Index: %d", index);
-
-    //overwrite fileinfo values
+    // Overwrite fileinfo values
     strcpy(myRoot[index].cPath, newpath);
     myRoot[index].atime = myRoot[index].ctime = time(NULL);
 
     writeRoot();
-
-    //LOGF("Index Changed: %d", index);
-
     RETURN(0);
 }
 
@@ -262,8 +249,6 @@ int MyOnDiskFS::fuseRename(const char *path, const char *newpath) {
 int MyOnDiskFS::fuseGetattr(const char *path, struct stat *statbuf) {
     //LOGM();
     readRoot();
-
-    //LOGF( "\tAttributes of %s requested\n", path );
 
     // GNU's definitions of the attributes (http://www.gnu.org/software/libc/manual/html_node/Attribute-Meanings.html):
     // 		st_uid: 	The user ID of the file’s owner.
@@ -284,35 +269,37 @@ int MyOnDiskFS::fuseGetattr(const char *path, struct stat *statbuf) {
     statbuf->st_gid = getgid(); // The group of the file/directory is the same as the group of the user who mounted the filesystem
     statbuf->st_atime = time(NULL); // The last "a"ccess of the file/directory is right now
 
-    int ret = 0;
+    int ret = 0; // Return value
 
+    // Check if the path given is the root
     if (strcmp(path, "/") == 0) {
-        //LOG("path is rootdirectory \'/\'");
         statbuf->st_mode = S_IFDIR | 0755;
         statbuf->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
+
+    // Check if a filepath is given
     } else if (strlen(path) > 0) {
-        //LOG("path-length > 0");
+
+        // Find the file
         for (size_t i = 0; i < NUM_DIR_ENTRIES; i++) {
             if (myFsEmpty[i]) {
                 continue;
             }
-            //LOGF("Comparing string1: %s, and string2: %s", path, myRoot[i].cPath);
+
+            // Read metadata if the file was found
             if (strcmp(path, myRoot[i].cPath) == 0) {
                 statbuf->st_mode = myRoot[i].mode;
                 statbuf->st_nlink = 1;
                 statbuf->st_size = myRoot[i].size;
                 statbuf->st_mtime = myRoot[i].mtime; // The last "m"odification of the file/directory is right now
-                //LOG("fuseGetAttr()");
-                //LOG("filled statbuf with data");
-                //LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", i, myRoot[i].cPath, myRoot[i].size, myRoot[i].atime);
                 RETURN(0);
             }
         }
-        //LOG("havent found file in myFsFiles-array");
 
+        // No such file or directory
         ret = -ENOENT;
+
     } else {
-        //LOG("path-length <= 0");
+        // Path length is <= 0
         ret = -ENOENT;
     }
 
@@ -330,9 +317,8 @@ int MyOnDiskFS::fuseChmod(const char *path, mode_t mode) {
     //LOGM();
     readRoot();
 
+    // Get index of file by path
     size_t index = -1;
-
-    // Get index of file by  path
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++) {
         if (myFsEmpty[i]) {
             continue;
@@ -344,12 +330,13 @@ int MyOnDiskFS::fuseChmod(const char *path, mode_t mode) {
         }
     }
 
-    // file found?
+    // Check if the file has been found
     if (index < 0) {
+        // No such file or directory
         RETURN(-ENOENT);
     }
 
-    //overwrite fileinfo values
+    // Overwrite fileinfo values
     myRoot[index].mode = mode;
     myRoot[index].atime = myRoot[index].ctime = time(NULL);
 
@@ -369,8 +356,8 @@ int MyOnDiskFS::fuseChown(const char *path, uid_t uid, gid_t gid) {
     //LOGM();
     readRoot();
 
+    // Get index of file by path
     size_t index = -1;
-
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++) {
         if (myFsEmpty[i]) {
             continue;
@@ -382,12 +369,13 @@ int MyOnDiskFS::fuseChown(const char *path, uid_t uid, gid_t gid) {
         }
     }
 
-    // file found?
+    // Check if the file has been found
     if (index < 0) {
+        // No such file or directory
         RETURN(-ENOENT);
     }
 
-    //overwrite fileinfo values
+    // Overwrite fileinfo values
     myRoot[index].uid = uid;
     myRoot[index].gid = gid;
     myRoot[index].atime = myRoot[index].ctime = time(NULL);
@@ -408,16 +396,20 @@ int MyOnDiskFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
     //LOGM();
     readRoot();
 
+    // Check if too many files are open
     if (iCounterOpen >= NUM_OPEN_FILES) {
+        // Too many open files
         RETURN(-EMFILE);
     }
 
+    // Find the file and open it
     for (size_t i = 0; i < NUM_DIR_ENTRIES; i++) {
         if (myFsEmpty[i]) {
             continue;
         }
 
         if (strcmp(path, myRoot[i].cPath) == 0) {
+            // Check if the file is already open
             if (myFsOpenFiles[i]) {
                 RETURN(-EPERM); // Already Open
             } else {
@@ -426,8 +418,6 @@ int MyOnDiskFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
                 fileInfo->fh = i; // can be used in fuseRead and fuseRelease
                 iCounterOpen++;
                 myRoot[i].atime = myRoot[i].ctime = time(NULL);
-                //LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", i, myRoot[i].cPath, myRoot[i].size, myRoot[i].atime);
-                //LOGF("index: %d, iCounterOpen: %d", i, iCounterOpen);
                 break;
             }
         }
@@ -736,11 +726,10 @@ int MyOnDiskFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo) {
         RETURN(valid);
     }
 
+    // Check if the file is open
     if (!myFsOpenFiles[valid]) {
         RETURN(-EBADF);
     }
-
-    //LOGF("index: %d, filepath: %s, filesize: %ld, timestamp: %ld", fileInfo->fh, myRoot[fileInfo->fh].cPath, myRoot[fileInfo->fh].size, myRoot[fileInfo->fh].atime);
 
     myFsOpenFiles[valid] = false;
     iCounterOpen--;
@@ -885,30 +874,29 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
 /// \param [in] offset Can be ignored.
 /// \param [in] fileInfo Can be ignored.
 /// \return 0 on success, -ERRNO on failure.
-int MyOnDiskFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
-                            struct fuse_file_info *fileInfo) {
+int MyOnDiskFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fileInfo) {
     //LOGM();
-
-    //LOGF( "--> Getting The List of Files of %s\n", path );
     readRoot();
 
     filler(buf, ".", NULL, 0); // Current Directory
     filler(buf, "..", NULL, 0); // Parent Directory
 
-    if (strcmp(path, "/") ==
-        0) // If the user is trying to show the files/directories of the root directory show the following
-    {
+    // If the user is trying to show the files/directories of the root directory show the following
+    if (strcmp(path, "/") == 0) {
+
+        // Iterate through all the files
         for (size_t i = 0; i < NUM_DIR_ENTRIES; i++) {
             if (!myFsEmpty[i]) {
-                //LOGF("adding to filler: %s", myRoot[i].cPath+1);
+                // Add file to the readdir output
                 filler(buf, myRoot[i].cPath + 1, NULL, 0);
+
+                // Change access and changed time
                 myRoot[i].atime = myRoot[i].ctime = time(NULL);
             }
         }
     }
 
     writeRoot();
-
     RETURN(0);
 }
 
@@ -926,67 +914,42 @@ void *MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
         // turn of logfile buffering
         setvbuf(this->logFile, NULL, _IOLBF, 0);
 
-        /*LOG("Starting logging...\n");
+        LOG("Starting logging...\n");
 
         LOG("Using on-disk mode");
 
-        LOG("Blocks of Sections:");
-        LOGF("blocks4DATA: %d", this->blocks4DATA);
-        LOGF("blocks4SPBlock: %d", this->blocks4SPBlock);
-        LOGF("blocks4DMAP: %d", this->blocks4DMAP);
-        LOGF("blocks4FAT: %d", this->blocks4FAT);
-        LOGF("blocks4ROOT: %d", this->blocks4ROOT);
-
-        LOG("Start Pos of Sections:");
-        LOGF("posDATA: %d", this->posSPBlock);
-        LOGF("posDMAP: %d", this->posDMAP);
-        LOGF("posFAT: %d", this->posFAT);
-        LOGF("posROOT: %d", this->posROOT);
-        LOGF("posDATA: %d", this->posDATA);
-
-        LOG("End Pos of Data Section:");
-        LOGF("posENDofDATA: %d", this->posENDofDATA);*/
-
         this->containerFilePath = ((MyFsInfo *) fuse_get_context()->private_data)->contFile;
 
-        //LOGF("Container file name: %s", containerFilePath);
+        LOGF("Container file name: %s", containerFilePath);
 
         int ret = this->blockDevice->open(this->containerFilePath);
 
         if (ret >= 0) {
-            //LOG("Container file does exist, reading");
+            LOG("Container file does exist, reading");
 
             readSuperBlock();
             readDmap();
             readFat();
             readRoot();
 
-            //this->blockDevice->close();
-
             initializeHelpers();
 
         } else if (ret == -ENOENT) {
-            //LOG("Container file does not exist, creating a new one");
+            LOG("Container file does not exist, creating a new one");
 
             ret = this->blockDevice->create(this->containerFilePath);
 
             if (ret >= 0) {
-                //sync to container
-
+                // Sync to container
                 writeSuperBlock();
                 writeDmap();
                 writeFat();
                 writeRoot();
-
-                //this->blockDevice->close();
             }
         }
 
-        /*LOG("SuperBlock:");
-        LOGF("numFreeBlocks: %d", this->mySuperBlock.numFreeBlocks);*/
-
         if (ret < 0) {
-            //LOGF("ERROR: Access to container file failed with error %d", ret);
+            LOGF("ERROR: Access to container file failed with error %d", ret);
         }
     }
 
